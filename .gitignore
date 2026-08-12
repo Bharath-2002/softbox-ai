@@ -32,6 +32,10 @@ htmlcov/
 /tmp/
 /uploads/
 
+# Local working docs — kept out of the repo deliberately
+CHECKLIST.md
+CLAUDE.md
+
 # Editors
 .vscode/
 .idea/
