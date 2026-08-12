@@ -272,7 +272,7 @@ subgraph INF["app/infrastructure/ — adapters"]
   I2["storage/<br/>S3 presigned upload · content addressing"]
   I3["providers/<br/>Nano Banana 2 · text LLM · vision"]
   I4["channels/<br/>meta · pinterest · storefront"]
-  I5["queue/<br/>ARQ driver · outbox relay"]
+  I5["queue/<br/>Postgres SKIP LOCKED driver<br/>outbox relay"]
   I6["identity/<br/>OIDC · token store · crypto"]
 end
 
@@ -330,13 +330,12 @@ end
 
 subgraph PROC["Application processes"]
   APIP["<b>API service</b><br/>/platform · /admin<br/>/public · /webhooks"]
-  WRK["<b>Workers — ARQ</b><br/>normalise · analyse · generate<br/>QC · write copy · render · publish"]
+  WRK["<b>Workers</b><br/>normalise · analyse · generate<br/>QC · write copy · render · publish"]
   POL["<b>Poller / reconciler</b><br/>due_at scheduling · stuck runs<br/>outbox relay · token refresh"]
 end
 
-subgraph DATA["State"]
-  PG[("Postgres 16<br/>RLS FORCED<br/>composite tenant FKs<br/>PITR backups")]
-  RD[("Redis / Valkey<br/>queue · rate-limit<br/>buckets · cache")]
+subgraph DATA["State — Postgres is the only stateful service in v1 (D19)"]
+  PG[("Postgres 16<br/>RLS FORCED · composite tenant FKs<br/>workflow state · queue · rate limits<br/>PITR backups")]
   OBJ[("S3-compatible — R2<br/>inputs · templates<br/>generated · renditions")]
 end
 
@@ -362,12 +361,11 @@ CDN --> OBJ
 
 LB --> APIP
 APIP --> PG
-APIP --> RD
 APIP --> OBJ
 APIP --> IDP
 APIP --> KMS
 
-RD --> WRK
+PG -->|"LISTEN/NOTIFY + SKIP LOCKED"| WRK
 WRK --> PG
 WRK --> OBJ
 WRK --> NB
@@ -378,7 +376,6 @@ WRK --> PIN
 WRK --> KMS
 
 POL --> PG
-POL --> RD
 POL --> META
 POL --> PIN
 

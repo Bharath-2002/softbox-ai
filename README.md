@@ -31,7 +31,7 @@ Sarees are the first vertical, not a special case.
 | Database | PostgreSQL 16 — row-level security, composite tenant foreign keys |
 | ORM / migrations | SQLAlchemy 2.0 (imperative mapping), Alembic |
 | Validation | Pydantic v2 |
-| Queue | ARQ + Redis, with a Postgres-backed workflow state machine |
+| Queue | Postgres-backed (`FOR UPDATE SKIP LOCKED` + `LISTEN/NOTIFY`); Redis/ARQ is a documented upgrade path |
 | Storage | S3-compatible object storage behind a CDN |
 | Image generation | Nano Banana 2 |
 | Auth | OIDC (Google Workspace / Entra), behind an identity port |

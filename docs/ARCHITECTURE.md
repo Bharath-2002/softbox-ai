@@ -581,10 +581,32 @@ sufficient, and a durable workflow engine stays a real escape hatch instead of a
 - **Poison-message handling** — bounded retries with exponential backoff and jitter, then a dead
   state with the error preserved. Never infinite retry against a paid API.
 
-**Queue choice: ARQ** (asyncio-native, Redis, small surface, fits an async FastAPI stack) behind a
-`TaskQueue` port. Conservative alternative: **Celery** (larger ecosystem, mature ops tooling) if
-you want beat/routing/Flower out of the box. Escape hatch: **Temporal**, if the saga complexity
-outgrows a step-executor model. The port makes this a one-adapter change.
+**Queue choice (amended 2026-08-12): Postgres-backed, no Redis in v1.**
+
+Because workflow state already lives in Postgres, the queue only needs to be a durable work list.
+`SELECT … FOR UPDATE SKIP LOCKED` with `LISTEN/NOTIFY` to avoid polling latency does that, either
+hand-rolled or via `procrastinate` (asyncio-native, Postgres-only). This sits behind a `TaskQueue`
+port exactly as ARQ would have.
+
+**Rationale.** Redis is cheap in dollars but is a *third stateful service* to provision, secure,
+monitor, back up and reason about during an outage — real operational cost for a small team, paid
+from day one. It also creates the failure mode where the queue and the state store disagree after a
+Redis restart, which Postgres-backed removes entirely by making enqueue and state transition the
+same transaction. And the workload is a poor fit for Redis's strengths: jobs are dominated by
+30-second external image calls, so queue throughput is nowhere near the regime where Redis's speed
+matters.
+
+Redis also disappears from the other two things it was carrying: per-account publish rate limiting
+becomes a row with a conditional UPDATE (the same pattern as D24), and storefront caching is served
+by ETags and the CDN, which M8 builds regardless.
+
+**Upgrade path**, in order, each a one-adapter change: **ARQ** (asyncio-native, Redis) if queue
+polling or DB contention becomes measurable; **Celery** if you need mature routing/beat/Flower
+tooling at scale; **Temporal** if saga complexity outgrows a step-executor model.
+
+**Triggers to revisit** — all observable in the M9 dashboards rather than predictable now: job
+pickup latency exceeding a few seconds under normal load, the rate-limit or queue tables becoming
+contention hotspots, or cache needs the CDN cannot serve.
 
 ### Template lifecycle
 
@@ -804,8 +826,9 @@ Provider calls recorded/replayed (VCR-style); a small nightly live-smoke suite a
 sandboxes. `ruff`, `mypy --strict`, `import-linter` in CI.
 
 **Deployment.** Docker. Three process types: API, workers, poller/scheduler. Managed Postgres 16
-with PITR. Redis/Valkey. S3-compatible object storage behind a CDN — Cloudflare R2 is worth
-considering specifically for zero egress fees, since this product serves a lot of images.
+with PITR — the only stateful service in v1 (D19). S3-compatible object storage behind a CDN —
+Cloudflare R2 is worth considering specifically for zero egress fees, since this product serves a
+lot of images.
 Alembic migrations as a pre-deploy job, expand/contract only (never a destructive migration in the
 same release as the code that stops using the column).
 
@@ -828,7 +851,7 @@ demonstrable.
 | **M2** | Taxonomy & spec builder | Categories + inheritance, attribute definitions + runtime Pydantic compilation, variant axes, input slots, catalog slots, slot→input requirements, **spec versioning (D15)**, settings resolver | 2.5 wks |
 | **M3** | Assets & templates | Presigned upload + verification, content addressing, template CRUD, **template analysis agent**, placeholder validation (D14a), template state machine | 2 wks |
 | **M4** | Products & variants | Product CRUD against the resolved spec, input image capture and binding, **input normalisation stage (§6.1)**, variants and axis combinations, product/variant state machine, `needs_attention` handling | 2.5 wks |
-| **M5** | Generation pipeline | Workflow runner + outbox + ARQ workers + reconciler, model provider ports and the chosen adapter, prompt composition, generation requests/items, **quota reservation (D24)**, **QC agent (D20)**, catalog images | 3 wks |
+| **M5** | Generation pipeline | Workflow runner + outbox + Postgres-backed queue + workers + reconciler, model provider ports and the chosen adapter, prompt composition, generation requests/items, **quota reservation (D24)**, **QC agent (D20)**, catalog images | 3 wks |
 | **M6** | Approval & content | Approval queue and bulk actions, `approval.required` wiring incl. per-channel, copywriting agent, content drafts, brand-rule validation, channel renditions | 2 wks |
 | **M7** | Publishing | Channel port, OAuth connect flows, token refresh job, website publish, Pinterest, Instagram, Facebook, idempotency + rate limiting + scheduler, metrics fetch-back | 3 wks |
 | **M8** | Storefront API & frontend cutover | Public read API, domain→tenant resolution, caching/ETags, migrate the React app off `products.js`, category filter routes | 1.5 wks |
@@ -866,5 +889,5 @@ The architecture stands as written. These two inputs would sharpen specific numb
    studio setup with controlled lighting and a plain backdrop, §6.1 shrinks to validation only and
    M4 loses about half a week — and the D0 fidelity numbers improve independently of model choice.
 2. **Expected scale in year 1** — tenants, products per tenant, images generated per month. This
-   drives the cost model, the ARQ-vs-Celery call in D19, and whether read replicas belong in M9
+   drives the cost model, when the Postgres queue needs replacing with Redis/ARQ (D19), and whether read replicas belong in M9
    rather than "planned for" (A5).
