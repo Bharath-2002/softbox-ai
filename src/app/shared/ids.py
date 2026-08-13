@@ -12,6 +12,9 @@ from typing import NewType
 
 TenantId = NewType("TenantId", uuid.UUID)
 UserId = NewType("UserId", uuid.UUID)
+IdentityId = NewType("IdentityId", uuid.UUID)
+TenantMembershipId = NewType("TenantMembershipId", uuid.UUID)
+SessionId = NewType("SessionId", uuid.UUID)
 
 
 def new_tenant_id() -> TenantId:
@@ -20,3 +23,15 @@ def new_tenant_id() -> TenantId:
 
 def new_user_id() -> UserId:
     return UserId(uuid.uuid4())
+
+
+def new_identity_id() -> IdentityId:
+    return IdentityId(uuid.uuid4())
+
+
+def new_tenant_membership_id() -> TenantMembershipId:
+    return TenantMembershipId(uuid.uuid4())
+
+
+def new_session_id() -> SessionId:
+    return SessionId(uuid.uuid4())

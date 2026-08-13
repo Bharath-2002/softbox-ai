@@ -1,0 +1,118 @@
+"""The composite tenant-to-tenant foreign key deferred from chunk 3 (D2).
+
+``sessions (tenant_id, user_id)`` -> ``tenant_memberships (tenant_id,
+user_id)`` — a session cannot claim an active tenant the user does not
+actually belong to. This is a referential-integrity guarantee the database
+enforces regardless of RLS, proven directly with SQL rather than through
+either repository, because it is a property of the schema, not of any one
+port's contract.
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Callable
+
+import pytest
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+
+from app.infrastructure.persistence.unit_of_work import SqlUnitOfWork
+from app.shared.ids import TenantId, new_tenant_id, new_user_id
+
+UowFactory = Callable[[TenantId | None], SqlUnitOfWork]
+
+pytestmark = pytest.mark.db
+
+INSERT_TENANT = text(
+    "INSERT INTO tenants (id, name, slug, status, created_at, updated_at) "
+    "VALUES (:id, 't', :slug, 'active', now(), now())"
+)
+INSERT_USER = text(
+    "INSERT INTO users (id, email, email_verified, status, created_at, updated_at) "
+    "VALUES (:id, :email, true, 'active', now(), now())"
+)
+INSERT_MEMBERSHIP = text(
+    "INSERT INTO tenant_memberships (id, tenant_id, user_id, role, extra_capabilities, created_at) "
+    "VALUES (:id, :tenant_id, :user_id, 'owner', '[]', now())"
+)
+INSERT_SESSION = text(
+    "INSERT INTO sessions "
+    "(id, user_id, tenant_id, refresh_token_hash, expires_at, created_at) "
+    "VALUES (:id, :user_id, :tenant_id, :hash, now() + interval '30 days', now())"
+)
+
+
+async def test_session_cannot_claim_a_tenant_the_user_does_not_belong_to(
+    owner_uow: UowFactory,
+) -> None:
+    tenant_the_user_belongs_to = new_tenant_id()
+    tenant_the_user_does_not_belong_to = new_tenant_id()
+    user_id = new_user_id()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(
+            INSERT_TENANT, {"id": str(tenant_the_user_belongs_to), "slug": str(uuid.uuid4())}
+        )
+        await uow.session.execute(
+            INSERT_TENANT,
+            {"id": str(tenant_the_user_does_not_belong_to), "slug": str(uuid.uuid4())},
+        )
+        await uow.session.execute(
+            INSERT_USER, {"id": str(user_id), "email": f"{user_id}@example.com"}
+        )
+        await uow.session.execute(
+            INSERT_MEMBERSHIP,
+            {
+                "id": str(uuid.uuid4()),
+                "tenant_id": str(tenant_the_user_belongs_to),
+                "user_id": str(user_id),
+            },
+        )
+
+    # A session for the tenant the user IS a member of: succeeds.
+    async with owner_uow(None) as uow:
+        await uow.session.execute(
+            INSERT_SESSION,
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": str(user_id),
+                "tenant_id": str(tenant_the_user_belongs_to),
+                "hash": f"valid-{uuid.uuid4()}",
+            },
+        )
+
+    # A session claiming the tenant the user is NOT a member of: rejected by
+    # the composite FK, not merely inconsistent application state.
+    with pytest.raises(DBAPIError, match="violates foreign key constraint"):
+        async with owner_uow(None) as uow:
+            await uow.session.execute(
+                INSERT_SESSION,
+                {
+                    "id": str(uuid.uuid4()),
+                    "user_id": str(user_id),
+                    "tenant_id": str(tenant_the_user_does_not_belong_to),
+                    "hash": f"invalid-{uuid.uuid4()}",
+                },
+            )
+
+
+async def test_session_with_no_tenant_bypasses_the_membership_check(owner_uow: UowFactory) -> None:
+    """A platform-plane session with no active tenant has nothing to satisfy
+    - a composite FK is not checked when any column in it is NULL."""
+    user_id = new_user_id()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(
+            INSERT_USER, {"id": str(user_id), "email": f"{user_id}@example.com"}
+        )
+        # No tenant_memberships row exists for this user at all.
+        await uow.session.execute(
+            INSERT_SESSION,
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": str(user_id),
+                "tenant_id": None,
+                "hash": f"platform-plane-{uuid.uuid4()}",
+            },
+        )

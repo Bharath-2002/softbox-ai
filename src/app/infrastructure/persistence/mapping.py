@@ -1,0 +1,136 @@
+"""Imperative ORM mapping (D7): the first in this codebase.
+
+Domain entities in ``app.entities`` are plain dataclasses with zero knowledge
+of SQLAlchemy. The ``Table`` objects and ``registry.map_imperatively(...)``
+calls here are what makes them persistable — one class per concept, no
+parallel ORM model, no hand-written row-to-entity mapper to maintain.
+
+Column shapes here are hand-kept in sync with the Alembic migrations that
+created them (no ``autogenerate`` yet — see ``migrations/env.py``). They do
+not need to restate every DB-level constraint (CHECK constraints, for
+instance) since Postgres enforces those regardless of what SQLAlchemy knows;
+they need to be accurate enough for correct query generation.
+
+Enum-typed entity fields (``TenantMembership.role: Role``) use SQLAlchemy's
+``Enum(..., native_enum=False, values_callable=...)`` on the Column, not a
+plain ``Text`` column with manual conversion at the repository boundary.
+That was the first draft, and it does not actually work: with
+``map_imperatively`` binding the entity class itself, the ORM sets attributes
+directly from row values with no conversion step unless the Column type
+provides one. A plain-Text column round-trips a ``Role`` correctly on
+*write* only because ``Role(str, Enum)`` members are themselves ``str``
+instances — but a *read* sets ``.role`` to a bare ``str`` such as
+``"owner"``, and a bare ``str`` has no ``.value`` attribute, so any code
+calling ``membership.role.value`` after a read crashes. Confirmed with a
+throwaway script before writing this, not assumed. ``values_callable`` is
+required alongside ``native_enum=False`` — SQLAlchemy's default is to store
+the enum *member name*, not ``.value``, which would not match this schema's
+lowercase values or its ``CHECK`` constraint.
+
+``start_mappers()`` is called exactly once, from the composition root
+(``bootstrap``), before any session is created. Calling it twice raises —
+SQLAlchemy does not support re-mapping a class.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Table,
+    Text,
+    Uuid,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import registry
+
+from app.entities.identity import Identity
+from app.entities.roles import Role
+from app.entities.session import Session
+from app.entities.tenant_membership import TenantMembership
+from app.entities.user import User
+
+_role_type = Enum(
+    Role,
+    name="tenant_membership_role",
+    native_enum=False,  # stored as text + a CHECK constraint (the migration), not a PG enum type
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+mapper_registry = registry()
+metadata = mapper_registry.metadata
+
+users_table = Table(
+    "users",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("email", Text(), nullable=False),
+    Column("email_verified", Boolean(), nullable=False),
+    Column("display_name", Text(), nullable=True),
+    Column("status", Text(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+identities_table = Table(
+    "identities",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("user_id", ForeignKey("users.id"), nullable=False),
+    Column("provider", Text(), nullable=False),
+    Column("issuer", Text(), nullable=False),
+    Column("subject", Text(), nullable=False),
+    Column("raw_claims", JSONB(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+tenant_memberships_table = Table(
+    "tenant_memberships",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("user_id", ForeignKey("users.id"), nullable=False),
+    Column("role", _role_type, nullable=False),
+    Column("extra_capabilities", JSONB(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+sessions_table = Table(
+    "sessions",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("user_id", ForeignKey("users.id"), nullable=False),
+    Column("tenant_id", Uuid(), nullable=True),
+    Column("refresh_token_hash", Text(), nullable=False),
+    Column("previous_token_hash", Text(), nullable=True),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("revoked_at", DateTime(timezone=True), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+# No entity class - a grant, not a rich domain object. Queried via Core
+# directly by SqlPlatformAdminRepository rather than through the ORM.
+platform_admins_table = Table(
+    "platform_admins",
+    metadata,
+    Column("user_id", ForeignKey("users.id"), primary_key=True),
+    Column("granted_by", ForeignKey("users.id"), nullable=False),
+    Column("granted_at", DateTime(timezone=True), nullable=False),
+)
+
+_mapped = False
+
+
+def start_mappers() -> None:
+    global _mapped
+    if _mapped:
+        return
+    mapper_registry.map_imperatively(User, users_table)
+    mapper_registry.map_imperatively(Identity, identities_table)
+    mapper_registry.map_imperatively(TenantMembership, tenant_memberships_table)
+    mapper_registry.map_imperatively(Session, sessions_table)
+    _mapped = True
