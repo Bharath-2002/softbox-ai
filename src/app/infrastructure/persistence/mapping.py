@@ -49,6 +49,7 @@ from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import registry
 
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
+from app.entities.catalog_slot_input_requirement import CatalogSlotInputRequirement
 from app.entities.category import Category
 from app.entities.identity import Identity
 from app.entities.image_slots import CatalogImageSlot, InputImageSlot
@@ -264,6 +265,18 @@ catalog_image_slots_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+catalog_slot_input_requirements_table = Table(
+    "catalog_slot_input_requirements",
+    metadata,
+    Column("catalog_image_slot_id", Uuid(), primary_key=True),
+    Column("input_image_slot_id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("role", Text(), nullable=False),
+    Column("prompt_position", Integer(), nullable=False),
+    Column("is_required", Boolean(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -321,4 +334,7 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(VariantAxisValue, variant_axis_values_table)
     mapper_registry.map_imperatively(InputImageSlot, input_image_slots_table)
     mapper_registry.map_imperatively(CatalogImageSlot, catalog_image_slots_table)
+    mapper_registry.map_imperatively(
+        CatalogSlotInputRequirement, catalog_slot_input_requirements_table
+    )
     _mapped = True

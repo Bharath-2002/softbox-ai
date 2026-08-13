@@ -401,6 +401,132 @@ async def test_a_catalog_image_slot_cannot_claim_a_category_from_another_tenant(
             )
 
 
+INSERT_CATALOG_SLOT_INPUT_REQUIREMENT = text(
+    "INSERT INTO catalog_slot_input_requirements "
+    "(catalog_image_slot_id, input_image_slot_id, tenant_id, role, prompt_position, "
+    "is_required, created_at) "
+    "VALUES (:catalog_image_slot_id, :input_image_slot_id, :tenant_id, 'garment_body', 0, "
+    "true, now())"
+)
+
+
+async def test_a_requirement_cannot_claim_a_catalog_slot_from_another_tenant(
+    owner_uow: UowFactory,
+) -> None:
+    """``catalog_slot_input_requirements (tenant_id, catalog_image_slot_id)``
+    -> ``catalog_image_slots (tenant_id, id)`` (D13, D2) - the first of this
+    join's two composite FKs."""
+    tenant_a = new_tenant_id()
+    tenant_b = new_tenant_id()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_a), "slug": str(uuid.uuid4())})
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_b), "slug": str(uuid.uuid4())})
+
+    category_in_a = Category.create(
+        tenant_a, key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()
+    )
+    catalog_slot_in_a = uuid.uuid4()
+    input_slot_in_b = uuid.uuid4()
+    category_in_b = Category.create(
+        tenant_b, key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()
+    )
+    async with owner_uow(tenant_a) as uow:
+        await uow.categories.add(category_in_a)
+        await uow.session.execute(
+            INSERT_CATALOG_IMAGE_SLOT,
+            {
+                "id": str(catalog_slot_in_a),
+                "tenant_id": str(tenant_a),
+                "category_id": str(category_in_a.id),
+                "key": "closeup",
+            },
+        )
+    async with owner_uow(tenant_b) as uow:
+        await uow.categories.add(category_in_b)
+        await uow.session.execute(
+            INSERT_INPUT_IMAGE_SLOT,
+            {
+                "id": str(input_slot_in_b),
+                "tenant_id": str(tenant_b),
+                "category_id": str(category_in_b.id),
+                "key": "border_detail",
+            },
+        )
+
+    # tenant_id=b, but the catalog slot belongs to tenant a: rejected by the
+    # first composite FK.
+    with pytest.raises(DBAPIError, match="violates foreign key constraint"):
+        async with owner_uow(tenant_b) as uow:
+            await uow.session.execute(
+                INSERT_CATALOG_SLOT_INPUT_REQUIREMENT,
+                {
+                    "catalog_image_slot_id": str(catalog_slot_in_a),
+                    "input_image_slot_id": str(input_slot_in_b),
+                    "tenant_id": str(tenant_b),
+                },
+            )
+
+
+async def test_a_requirement_cannot_claim_an_input_slot_from_another_tenant(
+    owner_uow: UowFactory,
+) -> None:
+    """``catalog_slot_input_requirements (tenant_id, input_image_slot_id)``
+    -> ``input_image_slots (tenant_id, id)`` (D13, D2) - the second of this
+    join's two composite FKs. Tenant b's own catalog slot is valid, so this
+    isolates the failure to the input-slot side rather than either FK."""
+    tenant_a = new_tenant_id()
+    tenant_b = new_tenant_id()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_a), "slug": str(uuid.uuid4())})
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_b), "slug": str(uuid.uuid4())})
+
+    category_in_a = Category.create(
+        tenant_a, key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()
+    )
+    category_in_b = Category.create(
+        tenant_b, key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()
+    )
+    input_slot_in_a = uuid.uuid4()
+    catalog_slot_in_b = uuid.uuid4()
+    async with owner_uow(tenant_a) as uow:
+        await uow.categories.add(category_in_a)
+        await uow.session.execute(
+            INSERT_INPUT_IMAGE_SLOT,
+            {
+                "id": str(input_slot_in_a),
+                "tenant_id": str(tenant_a),
+                "category_id": str(category_in_a.id),
+                "key": "border_detail",
+            },
+        )
+    async with owner_uow(tenant_b) as uow:
+        await uow.categories.add(category_in_b)
+        await uow.session.execute(
+            INSERT_CATALOG_IMAGE_SLOT,
+            {
+                "id": str(catalog_slot_in_b),
+                "tenant_id": str(tenant_b),
+                "category_id": str(category_in_b.id),
+                "key": "closeup",
+            },
+        )
+
+    # tenant_id=b and the catalog slot IS b's own - only the input slot is
+    # foreign, isolating the rejection to the second FK.
+    with pytest.raises(DBAPIError, match="violates foreign key constraint"):
+        async with owner_uow(tenant_b) as uow:
+            await uow.session.execute(
+                INSERT_CATALOG_SLOT_INPUT_REQUIREMENT,
+                {
+                    "catalog_image_slot_id": str(catalog_slot_in_b),
+                    "input_image_slot_id": str(input_slot_in_a),
+                    "tenant_id": str(tenant_b),
+                },
+            )
+
+
 async def test_session_with_no_tenant_bypasses_the_membership_check(owner_uow: UowFactory) -> None:
     """A platform-plane session with no active tenant has nothing to satisfy
     - a composite FK is not checked when any column in it is NULL."""

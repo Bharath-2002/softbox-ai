@@ -32,6 +32,9 @@ from app.infrastructure.persistence.audit_log_repository import SqlAuditLogRepos
 from app.infrastructure.persistence.catalog_image_slot_repository import (
     SqlCatalogImageSlotRepository,
 )
+from app.infrastructure.persistence.catalog_slot_input_requirement_repository import (
+    SqlCatalogSlotInputRequirementRepository,
+)
 from app.infrastructure.persistence.category_repository import SqlCategoryRepository
 from app.infrastructure.persistence.idempotency_repository import SqlIdempotencyRepository
 from app.infrastructure.persistence.identity_repository import SqlIdentityRepository
@@ -52,6 +55,9 @@ from app.infrastructure.persistence.variant_axis_value_repository import (
 from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
 from app.services.ports.catalog_image_slot_repository import CatalogImageSlotRepository
+from app.services.ports.catalog_slot_input_requirement_repository import (
+    CatalogSlotInputRequirementRepository,
+)
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
@@ -96,6 +102,9 @@ class SqlUnitOfWork:
         self._variant_axis_values: SqlVariantAxisValueRepository | None = None
         self._input_image_slots: SqlInputImageSlotRepository | None = None
         self._catalog_image_slots: SqlCatalogImageSlotRepository | None = None
+        self._catalog_slot_input_requirements: SqlCatalogSlotInputRequirementRepository | None = (
+            None
+        )
 
     @property
     def session(self) -> AsyncSession:
@@ -183,6 +192,14 @@ class SqlUnitOfWork:
             self._catalog_image_slots = SqlCatalogImageSlotRepository(self.session)
         return self._catalog_image_slots
 
+    @property
+    def catalog_slot_input_requirements(self) -> CatalogSlotInputRequirementRepository:
+        if self._catalog_slot_input_requirements is None:
+            self._catalog_slot_input_requirements = SqlCatalogSlotInputRequirementRepository(
+                self.session
+            )
+        return self._catalog_slot_input_requirements
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -223,6 +240,7 @@ class SqlUnitOfWork:
             self._variant_axis_values = None
             self._input_image_slots = None
             self._catalog_image_slots = None
+            self._catalog_slot_input_requirements = None
 
 
 def make_unit_of_work_factory(

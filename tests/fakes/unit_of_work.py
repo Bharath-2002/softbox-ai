@@ -17,6 +17,9 @@ from app.shared.ids import TenantId
 from tests.fakes.attribute_definition_repository import InMemoryAttributeDefinitionRepository
 from tests.fakes.audit_log_repository import InMemoryAuditLogRepository
 from tests.fakes.catalog_image_slot_repository import InMemoryCatalogImageSlotRepository
+from tests.fakes.catalog_slot_input_requirement_repository import (
+    InMemoryCatalogSlotInputRequirementRepository,
+)
 from tests.fakes.category_repository import InMemoryCategoryRepository
 from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
 from tests.fakes.identity_repository import InMemoryIdentityRepository
@@ -46,6 +49,7 @@ class FakeUnitOfWork:
         variant_axis_values: InMemoryVariantAxisValueRepository,
         input_image_slots: InMemoryInputImageSlotRepository,
         catalog_image_slots: InMemoryCatalogImageSlotRepository,
+        catalog_slot_input_requirements: InMemoryCatalogSlotInputRequirementRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -62,6 +66,7 @@ class FakeUnitOfWork:
         self.variant_axis_values = variant_axis_values
         self.input_image_slots = input_image_slots
         self.catalog_image_slots = catalog_image_slots
+        self.catalog_slot_input_requirements = catalog_slot_input_requirements
         self.committed = False
         self.rolled_back = False
 
@@ -100,6 +105,7 @@ class FakeUnitOfWorkFactory:
         self.variant_axis_values = InMemoryVariantAxisValueRepository()
         self.input_image_slots = InMemoryInputImageSlotRepository()
         self.catalog_image_slots = InMemoryCatalogImageSlotRepository()
+        self.catalog_slot_input_requirements = InMemoryCatalogSlotInputRequirementRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -116,6 +122,7 @@ class FakeUnitOfWorkFactory:
             variant_axis_values=self.variant_axis_values,
             input_image_slots=self.input_image_slots,
             catalog_image_slots=self.catalog_image_slots,
+            catalog_slot_input_requirements=self.catalog_slot_input_requirements,
             tenant_id=tenant_id,
         )
 
