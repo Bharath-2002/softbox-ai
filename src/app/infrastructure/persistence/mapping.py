@@ -55,6 +55,7 @@ from app.entities.roles import Role
 from app.entities.session import Session
 from app.entities.tenant_membership import TenantMembership
 from app.entities.user import User
+from app.entities.variant_axis import VariantAxis, VariantAxisValue
 
 _role_type = Enum(
     Role,
@@ -193,6 +194,35 @@ attribute_definitions_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+variant_axes_table = Table(
+    "variant_axes",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("category_id", Uuid(), nullable=False),
+    Column("key", Text(), nullable=False),
+    Column("label", Text(), nullable=False),
+    Column("position", Integer(), nullable=False),
+    Column("affects_imagery", Boolean(), nullable=False),
+    Column("introduced_in_version", Integer(), nullable=True),
+    Column("retired_in_version", Integer(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+variant_axis_values_table = Table(
+    "variant_axis_values",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("axis_id", Uuid(), nullable=False),
+    Column("value", Text(), nullable=False),
+    Column("label", Text(), nullable=False),
+    Column("metadata", JSONB(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -246,4 +276,6 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(Session, sessions_table)
     mapper_registry.map_imperatively(Category, categories_table)
     mapper_registry.map_imperatively(AttributeDefinition, attribute_definitions_table)
+    mapper_registry.map_imperatively(VariantAxis, variant_axes_table)
+    mapper_registry.map_imperatively(VariantAxisValue, variant_axis_values_table)
     _mapped = True

@@ -44,6 +44,8 @@ from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.user_repository import UserRepository
+from app.services.ports.variant_axis_repository import VariantAxisRepository
+from app.services.ports.variant_axis_value_repository import VariantAxisValueRepository
 from app.shared.ids import TenantId
 
 
@@ -74,6 +76,12 @@ class UnitOfWork(Protocol):
 
     @property
     def attribute_definitions(self) -> AttributeDefinitionRepository: ...
+
+    @property
+    def variant_axes(self) -> VariantAxisRepository: ...
+
+    @property
+    def variant_axis_values(self) -> VariantAxisValueRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

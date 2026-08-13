@@ -17,6 +17,8 @@ TenantMembershipId = NewType("TenantMembershipId", uuid.UUID)
 SessionId = NewType("SessionId", uuid.UUID)
 CategoryId = NewType("CategoryId", uuid.UUID)
 AttributeDefinitionId = NewType("AttributeDefinitionId", uuid.UUID)
+VariantAxisId = NewType("VariantAxisId", uuid.UUID)
+VariantAxisValueId = NewType("VariantAxisValueId", uuid.UUID)
 
 
 def new_tenant_id() -> TenantId:
@@ -45,3 +47,11 @@ def new_category_id() -> CategoryId:
 
 def new_attribute_definition_id() -> AttributeDefinitionId:
     return AttributeDefinitionId(uuid.uuid4())
+
+
+def new_variant_axis_id() -> VariantAxisId:
+    return VariantAxisId(uuid.uuid4())
+
+
+def new_variant_axis_value_id() -> VariantAxisValueId:
+    return VariantAxisValueId(uuid.uuid4())

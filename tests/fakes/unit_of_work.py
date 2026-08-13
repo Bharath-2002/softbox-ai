@@ -23,6 +23,8 @@ from tests.fakes.platform_admin_repository import InMemoryPlatformAdminRepositor
 from tests.fakes.session_repository import InMemorySessionRepository
 from tests.fakes.tenant_membership_repository import InMemoryTenantMembershipRepository
 from tests.fakes.user_repository import InMemoryUserRepository
+from tests.fakes.variant_axis_repository import InMemoryVariantAxisRepository
+from tests.fakes.variant_axis_value_repository import InMemoryVariantAxisValueRepository
 
 
 class FakeUnitOfWork:
@@ -38,6 +40,8 @@ class FakeUnitOfWork:
         audit_log: InMemoryAuditLogRepository,
         categories: InMemoryCategoryRepository,
         attribute_definitions: InMemoryAttributeDefinitionRepository,
+        variant_axes: InMemoryVariantAxisRepository,
+        variant_axis_values: InMemoryVariantAxisValueRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -50,6 +54,8 @@ class FakeUnitOfWork:
         self.audit_log = audit_log
         self.categories = categories
         self.attribute_definitions = attribute_definitions
+        self.variant_axes = variant_axes
+        self.variant_axis_values = variant_axis_values
         self.committed = False
         self.rolled_back = False
 
@@ -84,6 +90,8 @@ class FakeUnitOfWorkFactory:
         self.audit_log = InMemoryAuditLogRepository()
         self.categories = InMemoryCategoryRepository()
         self.attribute_definitions = InMemoryAttributeDefinitionRepository()
+        self.variant_axes = InMemoryVariantAxisRepository()
+        self.variant_axis_values = InMemoryVariantAxisValueRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -96,6 +104,8 @@ class FakeUnitOfWorkFactory:
             audit_log=self.audit_log,
             categories=self.categories,
             attribute_definitions=self.attribute_definitions,
+            variant_axes=self.variant_axes,
+            variant_axis_values=self.variant_axis_values,
             tenant_id=tenant_id,
         )
 

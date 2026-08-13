@@ -39,6 +39,10 @@ from app.infrastructure.persistence.tenant_membership_repository import (
 )
 from app.infrastructure.persistence.tenant_scope import bind_tenant
 from app.infrastructure.persistence.user_repository import SqlUserRepository
+from app.infrastructure.persistence.variant_axis_repository import SqlVariantAxisRepository
+from app.infrastructure.persistence.variant_axis_value_repository import (
+    SqlVariantAxisValueRepository,
+)
 from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
 from app.services.ports.category_repository import CategoryRepository
@@ -48,6 +52,8 @@ from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.user_repository import UserRepository
+from app.services.ports.variant_axis_repository import VariantAxisRepository
+from app.services.ports.variant_axis_value_repository import VariantAxisValueRepository
 from app.shared.ids import TenantId
 
 
@@ -78,6 +84,8 @@ class SqlUnitOfWork:
         self._audit_log: SqlAuditLogRepository | None = None
         self._categories: SqlCategoryRepository | None = None
         self._attribute_definitions: SqlAttributeDefinitionRepository | None = None
+        self._variant_axes: SqlVariantAxisRepository | None = None
+        self._variant_axis_values: SqlVariantAxisValueRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -141,6 +149,18 @@ class SqlUnitOfWork:
             self._attribute_definitions = SqlAttributeDefinitionRepository(self.session)
         return self._attribute_definitions
 
+    @property
+    def variant_axes(self) -> VariantAxisRepository:
+        if self._variant_axes is None:
+            self._variant_axes = SqlVariantAxisRepository(self.session)
+        return self._variant_axes
+
+    @property
+    def variant_axis_values(self) -> VariantAxisValueRepository:
+        if self._variant_axis_values is None:
+            self._variant_axis_values = SqlVariantAxisValueRepository(self.session)
+        return self._variant_axis_values
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -177,6 +197,8 @@ class SqlUnitOfWork:
             self._audit_log = None
             self._categories = None
             self._attribute_definitions = None
+            self._variant_axes = None
+            self._variant_axis_values = None
 
 
 def make_unit_of_work_factory(
