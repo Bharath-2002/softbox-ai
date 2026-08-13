@@ -40,6 +40,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     Table,
     Text,
     Uuid,
@@ -120,6 +121,24 @@ platform_admins_table = Table(
     Column("user_id", ForeignKey("users.id"), primary_key=True),
     Column("granted_by", ForeignKey("users.id"), nullable=False),
     Column("granted_at", DateTime(timezone=True), nullable=False),
+)
+
+# No entity class - a stored claim ticket, not a rich domain object. Queried
+# via Core directly by SqlIdempotencyRepository, same shape as
+# platform_admins_table above.
+idempotency_keys_table = Table(
+    "idempotency_keys",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("key", Text(), nullable=False),
+    Column("request_fingerprint", Text(), nullable=False),
+    # Both null between reserve() and store_response() - see the port's
+    # module docstring for why that gap is a legitimate, distinguishable
+    # state rather than something to collapse into one write.
+    Column("response_status", Integer(), nullable=True),
+    Column("response_body", JSONB(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
 _mapped = False

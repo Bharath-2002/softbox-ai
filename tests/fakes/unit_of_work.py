@@ -14,6 +14,7 @@ from collections.abc import Callable
 from types import TracebackType
 
 from app.shared.ids import TenantId
+from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
 from tests.fakes.identity_repository import InMemoryIdentityRepository
 from tests.fakes.platform_admin_repository import InMemoryPlatformAdminRepository
 from tests.fakes.session_repository import InMemorySessionRepository
@@ -30,6 +31,7 @@ class FakeUnitOfWork:
         platform_admins: InMemoryPlatformAdminRepository,
         tenant_memberships: InMemoryTenantMembershipRepository,
         sessions: InMemorySessionRepository,
+        idempotency_keys: InMemoryIdempotencyRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -38,6 +40,7 @@ class FakeUnitOfWork:
         self.platform_admins = platform_admins
         self.tenant_memberships = tenant_memberships
         self.sessions = sessions
+        self.idempotency_keys = idempotency_keys
         self.committed = False
         self.rolled_back = False
 
@@ -68,6 +71,7 @@ class FakeUnitOfWorkFactory:
         self.platform_admins = InMemoryPlatformAdminRepository()
         self.tenant_memberships = InMemoryTenantMembershipRepository()
         self.sessions = InMemorySessionRepository()
+        self.idempotency_keys = InMemoryIdempotencyRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -76,6 +80,7 @@ class FakeUnitOfWorkFactory:
             platform_admins=self.platform_admins,
             tenant_memberships=self.tenant_memberships,
             sessions=self.sessions,
+            idempotency_keys=self.idempotency_keys,
             tenant_id=tenant_id,
         )
 

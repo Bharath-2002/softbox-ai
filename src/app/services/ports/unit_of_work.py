@@ -35,6 +35,7 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Protocol
 
+from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.session_repository import SessionRepository
@@ -58,6 +59,9 @@ class UnitOfWork(Protocol):
 
     @property
     def sessions(self) -> SessionRepository: ...
+
+    @property
+    def idempotency_keys(self) -> IdempotencyRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""
