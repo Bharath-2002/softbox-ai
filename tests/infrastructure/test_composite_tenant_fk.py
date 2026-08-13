@@ -17,7 +17,9 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from app.entities.category import Category
 from app.infrastructure.persistence.unit_of_work import SqlUnitOfWork
+from app.shared.clock import utcnow
 from app.shared.ids import TenantId, new_tenant_id, new_user_id
 
 UowFactory = Callable[[TenantId | None], SqlUnitOfWork]
@@ -172,6 +174,65 @@ async def test_a_category_cannot_claim_a_parent_from_another_tenant(owner_uow: U
                     "key": "child",
                     "name": "Child",
                     "slug": f"child-{uuid.uuid4()}",
+                },
+            )
+
+
+INSERT_ATTRIBUTE_DEFINITION = text(
+    "INSERT INTO attribute_definitions "
+    "(id, tenant_id, category_id, key, label, data_type, is_required, is_filterable, "
+    "is_public, position, validation, ui, created_at, updated_at) "
+    "VALUES (:id, :tenant_id, :category_id, :key, :label, 'text', false, false, true, 0, "
+    "'{}', '{}', now(), now())"
+)
+
+
+async def test_an_attribute_definition_cannot_claim_a_category_from_another_tenant(
+    owner_uow: UowFactory,
+) -> None:
+    """``attribute_definitions (tenant_id, category_id)`` -> ``categories
+    (tenant_id, id)`` (D11, D2) - the second composite FK between two
+    RLS-forced tables, and the first that isn't self-referential. A
+    definition must belong to the same tenant as the category it claims to
+    define a field on."""
+    tenant_a = new_tenant_id()
+    tenant_b = new_tenant_id()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_a), "slug": str(uuid.uuid4())})
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_b), "slug": str(uuid.uuid4())})
+
+    category_in_a = Category.create(
+        tenant_a, key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()
+    )
+    async with owner_uow(tenant_a) as uow:
+        await uow.categories.add(category_in_a)
+
+    # A definition within tenant A, on tenant A's own category: succeeds.
+    async with owner_uow(tenant_a) as uow:
+        await uow.session.execute(
+            INSERT_ATTRIBUTE_DEFINITION,
+            {
+                "id": str(uuid.uuid4()),
+                "tenant_id": str(tenant_a),
+                "category_id": str(category_in_a.id),
+                "key": "fabric",
+                "label": "Fabric",
+            },
+        )
+
+    # A row tagged as tenant B, claiming tenant A's category: rejected by
+    # the composite FK, not merely inconsistent application state.
+    with pytest.raises(DBAPIError, match="violates foreign key constraint"):
+        async with owner_uow(tenant_b) as uow:
+            await uow.session.execute(
+                INSERT_ATTRIBUTE_DEFINITION,
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": str(tenant_b),
+                    "category_id": str(category_in_a.id),
+                    "key": "fabric",
+                    "label": "Fabric",
                 },
             )
 

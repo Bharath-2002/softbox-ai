@@ -48,6 +48,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import registry
 
+from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
 from app.entities.category import Category
 from app.entities.identity import Identity
 from app.entities.roles import Role
@@ -59,6 +60,22 @@ _role_type = Enum(
     Role,
     name="tenant_membership_role",
     native_enum=False,  # stored as text + a CHECK constraint (the migration), not a PG enum type
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_data_type_type = Enum(
+    AttributeDataType,
+    name="attribute_definition_data_type",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_semantic_role_type = Enum(
+    SemanticRole,
+    name="attribute_definition_semantic_role",
+    native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
 )
@@ -152,6 +169,30 @@ categories_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+attribute_definitions_table = Table(
+    "attribute_definitions",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("category_id", Uuid(), nullable=False),
+    Column("key", Text(), nullable=False),
+    Column("label", Text(), nullable=False),
+    Column("help_text", Text(), nullable=True),
+    Column("data_type", _data_type_type, nullable=False),
+    Column("semantic_role", _semantic_role_type, nullable=True),
+    Column("is_required", Boolean(), nullable=False),
+    Column("is_filterable", Boolean(), nullable=False),
+    Column("is_public", Boolean(), nullable=False),
+    Column("position", Integer(), nullable=False),
+    Column("validation", JSONB(), nullable=False),
+    Column("ui", JSONB(), nullable=False),
+    Column("default_value", JSONB(), nullable=True),
+    Column("introduced_in_version", Integer(), nullable=True),
+    Column("retired_in_version", Integer(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -204,4 +245,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(TenantMembership, tenant_memberships_table)
     mapper_registry.map_imperatively(Session, sessions_table)
     mapper_registry.map_imperatively(Category, categories_table)
+    mapper_registry.map_imperatively(AttributeDefinition, attribute_definitions_table)
     _mapped = True

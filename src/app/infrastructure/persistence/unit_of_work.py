@@ -25,6 +25,9 @@ from types import TracebackType
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.infrastructure.persistence.attribute_definition_repository import (
+    SqlAttributeDefinitionRepository,
+)
 from app.infrastructure.persistence.audit_log_repository import SqlAuditLogRepository
 from app.infrastructure.persistence.category_repository import SqlCategoryRepository
 from app.infrastructure.persistence.idempotency_repository import SqlIdempotencyRepository
@@ -36,6 +39,7 @@ from app.infrastructure.persistence.tenant_membership_repository import (
 )
 from app.infrastructure.persistence.tenant_scope import bind_tenant
 from app.infrastructure.persistence.user_repository import SqlUserRepository
+from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
@@ -73,6 +77,7 @@ class SqlUnitOfWork:
         self._idempotency_keys: SqlIdempotencyRepository | None = None
         self._audit_log: SqlAuditLogRepository | None = None
         self._categories: SqlCategoryRepository | None = None
+        self._attribute_definitions: SqlAttributeDefinitionRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -130,6 +135,12 @@ class SqlUnitOfWork:
             self._categories = SqlCategoryRepository(self.session)
         return self._categories
 
+    @property
+    def attribute_definitions(self) -> AttributeDefinitionRepository:
+        if self._attribute_definitions is None:
+            self._attribute_definitions = SqlAttributeDefinitionRepository(self.session)
+        return self._attribute_definitions
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -165,6 +176,7 @@ class SqlUnitOfWork:
             self._idempotency_keys = None
             self._audit_log = None
             self._categories = None
+            self._attribute_definitions = None
 
 
 def make_unit_of_work_factory(

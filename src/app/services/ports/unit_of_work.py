@@ -35,6 +35,7 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Protocol
 
+from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
@@ -70,6 +71,9 @@ class UnitOfWork(Protocol):
 
     @property
     def categories(self) -> CategoryRepository: ...
+
+    @property
+    def attribute_definitions(self) -> AttributeDefinitionRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

@@ -14,6 +14,7 @@ from collections.abc import Callable
 from types import TracebackType
 
 from app.shared.ids import TenantId
+from tests.fakes.attribute_definition_repository import InMemoryAttributeDefinitionRepository
 from tests.fakes.audit_log_repository import InMemoryAuditLogRepository
 from tests.fakes.category_repository import InMemoryCategoryRepository
 from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
@@ -36,6 +37,7 @@ class FakeUnitOfWork:
         idempotency_keys: InMemoryIdempotencyRepository,
         audit_log: InMemoryAuditLogRepository,
         categories: InMemoryCategoryRepository,
+        attribute_definitions: InMemoryAttributeDefinitionRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -47,6 +49,7 @@ class FakeUnitOfWork:
         self.idempotency_keys = idempotency_keys
         self.audit_log = audit_log
         self.categories = categories
+        self.attribute_definitions = attribute_definitions
         self.committed = False
         self.rolled_back = False
 
@@ -80,6 +83,7 @@ class FakeUnitOfWorkFactory:
         self.idempotency_keys = InMemoryIdempotencyRepository()
         self.audit_log = InMemoryAuditLogRepository()
         self.categories = InMemoryCategoryRepository()
+        self.attribute_definitions = InMemoryAttributeDefinitionRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -91,6 +95,7 @@ class FakeUnitOfWorkFactory:
             idempotency_keys=self.idempotency_keys,
             audit_log=self.audit_log,
             categories=self.categories,
+            attribute_definitions=self.attribute_definitions,
             tenant_id=tenant_id,
         )
 
