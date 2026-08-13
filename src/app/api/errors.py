@@ -13,6 +13,7 @@ import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from app.shared.errors import (
     AppError,
@@ -94,6 +95,25 @@ def register_exception_handlers(app: FastAPI) -> None:
             detail=exc.message,
             request=request,
             extra={"details": exc.details} if exc.details else None,
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def _handle_integrity_error(request: Request, exc: Exception) -> JSONResponse:
+        # A constraint violation reaching here means a use case let a
+        # database-level guard (a unique index, a check constraint) do the
+        # rejecting rather than pre-checking — deliberately, for the ones
+        # that would otherwise be check-then-act (D15's concurrent-publish
+        # guard is the first of these). Without this handler such a
+        # violation falls through to the generic 500 below, which is wrong:
+        # it is a legitimate conflict the caller can react to, not a bug.
+        assert isinstance(exc, IntegrityError)
+        _log.info("integrity_error", path=request.url.path)
+        return problem_response(
+            status_code=status.HTTP_409_CONFLICT,
+            title="Conflict",
+            code="conflict",
+            detail="The request conflicts with existing state.",
+            request=request,
         )
 
     @app.exception_handler(RequestValidationError)

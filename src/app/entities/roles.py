@@ -29,7 +29,12 @@ class Role(StrEnum):
 
 
 _MANAGER_CAPABILITIES: frozenset[Capability] = frozenset(
-    {Capability.CATALOG_PUBLISH, Capability.TEMPLATE_MANAGE, Capability.PRODUCT_MANAGE}
+    {
+        Capability.CATALOG_PUBLISH,
+        Capability.TEMPLATE_MANAGE,
+        Capability.PRODUCT_MANAGE,
+        Capability.TAXONOMY_MANAGE,
+    }
 )
 
 ROLE_CAPABILITIES: dict[Role, frozenset[Capability]] = {

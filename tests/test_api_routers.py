@@ -1,13 +1,15 @@
 """The four planes (CLAUDE.md §9) are mounted under the API prefix with the
 right auth posture attached at router level.
 
-None of the four routers has a real route yet, so each test appends a
-throwaway probe route to the real router objects for the duration of one
-test and removes it afterward — the same approach ``test_api_basics.py``
+``admin`` carries real routes now (``admin_taxonomy.py``); ``platform``,
+``public`` and ``webhooks`` do not yet, so every router still gets a
+throwaway probe route appended to the real router objects for the duration
+of one test and removed afterward — the same approach ``test_api_basics.py``
 uses for the ops routes, extended here to also prove that ``create_app()``
 actually wires router-level ``dependencies=[...]`` end to end, not just that
 the dependency functions are individually correct (see
-``test_authorization_deps.py`` for that unit-level coverage).
+``test_authorization_deps.py`` for that unit-level coverage, and
+``test_admin_taxonomy_router.py`` for the real admin routes).
 """
 
 from __future__ import annotations

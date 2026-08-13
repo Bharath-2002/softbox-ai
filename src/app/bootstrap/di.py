@@ -25,6 +25,13 @@ from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
 from app.features.identity.start_impersonation import StartImpersonation
+from app.features.taxonomy.create_category import CreateCategory
+from app.features.taxonomy.get_category import GetCategory
+from app.features.taxonomy.get_published_category_spec import GetPublishedCategorySpec
+from app.features.taxonomy.list_category_children import ListCategoryChildren
+from app.features.taxonomy.move_category import MoveCategory
+from app.features.taxonomy.publish_category_spec import PublishCategorySpec
+from app.features.taxonomy.update_category import UpdateCategory
 from app.services.ports.identity_provider import IdentityProvider
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
@@ -88,3 +95,44 @@ CompleteLoginDep = Annotated[CompleteLogin, Depends(get_complete_login)]
 RefreshSessionDep = Annotated[RefreshSession, Depends(get_refresh_session)]
 LogoutDep = Annotated[Logout, Depends(get_logout)]
 StartImpersonationDep = Annotated[StartImpersonation, Depends(get_start_impersonation)]
+
+
+def get_create_category(uow_factory: UowFactoryDep, clock: ClockDep) -> CreateCategory:
+    return CreateCategory(uow_factory, clock)
+
+
+def get_update_category(uow_factory: UowFactoryDep, clock: ClockDep) -> UpdateCategory:
+    return UpdateCategory(uow_factory, clock)
+
+
+def get_move_category(uow_factory: UowFactoryDep, clock: ClockDep) -> MoveCategory:
+    return MoveCategory(uow_factory, clock)
+
+
+def get_publish_category_spec(uow_factory: UowFactoryDep, clock: ClockDep) -> PublishCategorySpec:
+    return PublishCategorySpec(uow_factory, clock)
+
+
+def get_published_category_spec_use_case(
+    uow_factory: UowFactoryDep,
+) -> GetPublishedCategorySpec:
+    return GetPublishedCategorySpec(uow_factory)
+
+
+def get_category_use_case(uow_factory: UowFactoryDep) -> GetCategory:
+    return GetCategory(uow_factory)
+
+
+def get_list_category_children(uow_factory: UowFactoryDep) -> ListCategoryChildren:
+    return ListCategoryChildren(uow_factory)
+
+
+CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
+UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
+MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
+PublishCategorySpecDep = Annotated[PublishCategorySpec, Depends(get_publish_category_spec)]
+GetPublishedCategorySpecDep = Annotated[
+    GetPublishedCategorySpec, Depends(get_published_category_spec_use_case)
+]
+GetCategoryDep = Annotated[GetCategory, Depends(get_category_use_case)]
+ListCategoryChildrenDep = Annotated[ListCategoryChildren, Depends(get_list_category_children)]
