@@ -324,6 +324,83 @@ async def test_a_variant_axis_value_cannot_claim_an_axis_from_another_tenant(
             )
 
 
+INSERT_INPUT_IMAGE_SLOT = text(
+    "INSERT INTO input_image_slots "
+    "(id, tenant_id, category_id, key, label, is_required, position, created_at, updated_at) "
+    "VALUES (:id, :tenant_id, :category_id, :key, :key, true, 0, now(), now())"
+)
+INSERT_CATALOG_IMAGE_SLOT = text(
+    "INSERT INTO catalog_image_slots "
+    "(id, tenant_id, category_id, key, label, position, aspect_ratio, target_width, "
+    "target_height, is_required, created_at, updated_at) "
+    "VALUES (:id, :tenant_id, :category_id, :key, :key, 0, '4:5', 1080, 1350, true, now(), now())"
+)
+
+
+async def test_an_input_image_slot_cannot_claim_a_category_from_another_tenant(
+    owner_uow: UowFactory,
+) -> None:
+    """``input_image_slots (tenant_id, category_id)`` -> ``categories
+    (tenant_id, id)`` (D13, D2) - same composite-FK shape as
+    ``attribute_definitions`` and ``variant_axes``."""
+    tenant_a = new_tenant_id()
+    tenant_b = new_tenant_id()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_a), "slug": str(uuid.uuid4())})
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_b), "slug": str(uuid.uuid4())})
+
+    category_in_a = Category.create(
+        tenant_a, key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()
+    )
+    async with owner_uow(tenant_a) as uow:
+        await uow.categories.add(category_in_a)
+
+    with pytest.raises(DBAPIError, match="violates foreign key constraint"):
+        async with owner_uow(tenant_b) as uow:
+            await uow.session.execute(
+                INSERT_INPUT_IMAGE_SLOT,
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": str(tenant_b),
+                    "category_id": str(category_in_a.id),
+                    "key": "border_detail",
+                },
+            )
+
+
+async def test_a_catalog_image_slot_cannot_claim_a_category_from_another_tenant(
+    owner_uow: UowFactory,
+) -> None:
+    """``catalog_image_slots (tenant_id, category_id)`` -> ``categories
+    (tenant_id, id)`` (D13, D2) - same composite-FK shape as
+    ``attribute_definitions`` and ``variant_axes``."""
+    tenant_a = new_tenant_id()
+    tenant_b = new_tenant_id()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_a), "slug": str(uuid.uuid4())})
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_b), "slug": str(uuid.uuid4())})
+
+    category_in_a = Category.create(
+        tenant_a, key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()
+    )
+    async with owner_uow(tenant_a) as uow:
+        await uow.categories.add(category_in_a)
+
+    with pytest.raises(DBAPIError, match="violates foreign key constraint"):
+        async with owner_uow(tenant_b) as uow:
+            await uow.session.execute(
+                INSERT_CATALOG_IMAGE_SLOT,
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": str(tenant_b),
+                    "category_id": str(category_in_a.id),
+                    "key": "closeup",
+                },
+            )
+
+
 async def test_session_with_no_tenant_bypasses_the_membership_check(owner_uow: UowFactory) -> None:
     """A platform-plane session with no active tenant has nothing to satisfy
     - a composite FK is not checked when any column in it is NULL."""

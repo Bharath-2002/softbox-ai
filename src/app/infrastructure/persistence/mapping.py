@@ -51,6 +51,7 @@ from sqlalchemy.orm import registry
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
 from app.entities.category import Category
 from app.entities.identity import Identity
+from app.entities.image_slots import CatalogImageSlot, InputImageSlot
 from app.entities.roles import Role
 from app.entities.session import Session
 from app.entities.tenant_membership import TenantMembership
@@ -223,6 +224,46 @@ variant_axis_values_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+input_image_slots_table = Table(
+    "input_image_slots",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("category_id", Uuid(), nullable=False),
+    Column("key", Text(), nullable=False),
+    Column("label", Text(), nullable=False),
+    Column("description", Text(), nullable=True),
+    Column("capture_guidance", Text(), nullable=True),
+    Column("example_asset_id", Uuid(), nullable=True),
+    Column("normalisation", JSONB(), nullable=False),
+    Column("is_required", Boolean(), nullable=False),
+    Column("position", Integer(), nullable=False),
+    Column("introduced_in_version", Integer(), nullable=True),
+    Column("retired_in_version", Integer(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+catalog_image_slots_table = Table(
+    "catalog_image_slots",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("category_id", Uuid(), nullable=False),
+    Column("key", Text(), nullable=False),
+    Column("label", Text(), nullable=False),
+    Column("description", Text(), nullable=True),
+    Column("position", Integer(), nullable=False),
+    Column("aspect_ratio", Text(), nullable=False),
+    Column("target_width", Integer(), nullable=False),
+    Column("target_height", Integer(), nullable=False),
+    Column("is_required", Boolean(), nullable=False),
+    Column("introduced_in_version", Integer(), nullable=True),
+    Column("retired_in_version", Integer(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -278,4 +319,6 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(AttributeDefinition, attribute_definitions_table)
     mapper_registry.map_imperatively(VariantAxis, variant_axes_table)
     mapper_registry.map_imperatively(VariantAxisValue, variant_axis_values_table)
+    mapper_registry.map_imperatively(InputImageSlot, input_image_slots_table)
+    mapper_registry.map_imperatively(CatalogImageSlot, catalog_image_slots_table)
     _mapped = True

@@ -37,9 +37,11 @@ from typing import Protocol
 
 from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
+from app.services.ports.catalog_image_slot_repository import CatalogImageSlotRepository
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
+from app.services.ports.input_image_slot_repository import InputImageSlotRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
@@ -82,6 +84,12 @@ class UnitOfWork(Protocol):
 
     @property
     def variant_axis_values(self) -> VariantAxisValueRepository: ...
+
+    @property
+    def input_image_slots(self) -> InputImageSlotRepository: ...
+
+    @property
+    def catalog_image_slots(self) -> CatalogImageSlotRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

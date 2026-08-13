@@ -29,9 +29,15 @@ from app.infrastructure.persistence.attribute_definition_repository import (
     SqlAttributeDefinitionRepository,
 )
 from app.infrastructure.persistence.audit_log_repository import SqlAuditLogRepository
+from app.infrastructure.persistence.catalog_image_slot_repository import (
+    SqlCatalogImageSlotRepository,
+)
 from app.infrastructure.persistence.category_repository import SqlCategoryRepository
 from app.infrastructure.persistence.idempotency_repository import SqlIdempotencyRepository
 from app.infrastructure.persistence.identity_repository import SqlIdentityRepository
+from app.infrastructure.persistence.input_image_slot_repository import (
+    SqlInputImageSlotRepository,
+)
 from app.infrastructure.persistence.platform_admin_repository import SqlPlatformAdminRepository
 from app.infrastructure.persistence.session_repository import SqlSessionRepository
 from app.infrastructure.persistence.tenant_membership_repository import (
@@ -45,9 +51,11 @@ from app.infrastructure.persistence.variant_axis_value_repository import (
 )
 from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
+from app.services.ports.catalog_image_slot_repository import CatalogImageSlotRepository
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
+from app.services.ports.input_image_slot_repository import InputImageSlotRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
@@ -86,6 +94,8 @@ class SqlUnitOfWork:
         self._attribute_definitions: SqlAttributeDefinitionRepository | None = None
         self._variant_axes: SqlVariantAxisRepository | None = None
         self._variant_axis_values: SqlVariantAxisValueRepository | None = None
+        self._input_image_slots: SqlInputImageSlotRepository | None = None
+        self._catalog_image_slots: SqlCatalogImageSlotRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -161,6 +171,18 @@ class SqlUnitOfWork:
             self._variant_axis_values = SqlVariantAxisValueRepository(self.session)
         return self._variant_axis_values
 
+    @property
+    def input_image_slots(self) -> InputImageSlotRepository:
+        if self._input_image_slots is None:
+            self._input_image_slots = SqlInputImageSlotRepository(self.session)
+        return self._input_image_slots
+
+    @property
+    def catalog_image_slots(self) -> CatalogImageSlotRepository:
+        if self._catalog_image_slots is None:
+            self._catalog_image_slots = SqlCatalogImageSlotRepository(self.session)
+        return self._catalog_image_slots
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -199,6 +221,8 @@ class SqlUnitOfWork:
             self._attribute_definitions = None
             self._variant_axes = None
             self._variant_axis_values = None
+            self._input_image_slots = None
+            self._catalog_image_slots = None
 
 
 def make_unit_of_work_factory(
