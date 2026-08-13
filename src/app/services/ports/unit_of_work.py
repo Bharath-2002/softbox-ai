@@ -48,6 +48,7 @@ from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.input_image_slot_repository import InputImageSlotRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.session_repository import SessionRepository
+from app.services.ports.settings_repository import SettingsRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.user_repository import UserRepository
 from app.services.ports.variant_axis_repository import VariantAxisRepository
@@ -100,6 +101,9 @@ class UnitOfWork(Protocol):
 
     @property
     def category_spec_versions(self) -> CategorySpecVersionRepository: ...
+
+    @property
+    def settings(self) -> SettingsRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

@@ -56,6 +56,7 @@ from app.entities.identity import Identity
 from app.entities.image_slots import CatalogImageSlot, InputImageSlot
 from app.entities.roles import Role
 from app.entities.session import Session
+from app.entities.setting import Setting, SettingScope
 from app.entities.tenant_membership import TenantMembership
 from app.entities.user import User
 from app.entities.variant_axis import VariantAxis, VariantAxisValue
@@ -87,6 +88,14 @@ _semantic_role_type = Enum(
 _spec_version_status_type = Enum(
     SpecVersionStatus,
     name="category_spec_version_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_setting_scope_type = Enum(
+    SettingScope,
+    name="setting_scope_type",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -300,6 +309,19 @@ category_spec_versions_table = Table(
     Column("published_at", DateTime(timezone=True), nullable=False),
 )
 
+settings_table = Table(
+    "settings",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=True),
+    Column("scope_type", _setting_scope_type, nullable=False),
+    Column("scope_id", Uuid(), nullable=True),
+    Column("key", Text(), nullable=False),
+    Column("value", JSONB(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -361,4 +383,5 @@ def start_mappers() -> None:
         CatalogSlotInputRequirement, catalog_slot_input_requirements_table
     )
     mapper_registry.map_imperatively(CategorySpecVersion, category_spec_versions_table)
+    mapper_registry.map_imperatively(Setting, settings_table)
     _mapped = True

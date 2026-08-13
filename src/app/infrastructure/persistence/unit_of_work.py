@@ -46,6 +46,7 @@ from app.infrastructure.persistence.input_image_slot_repository import (
 )
 from app.infrastructure.persistence.platform_admin_repository import SqlPlatformAdminRepository
 from app.infrastructure.persistence.session_repository import SqlSessionRepository
+from app.infrastructure.persistence.settings_repository import SqlSettingsRepository
 from app.infrastructure.persistence.tenant_membership_repository import (
     SqlTenantMembershipRepository,
 )
@@ -68,6 +69,7 @@ from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.input_image_slot_repository import InputImageSlotRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.session_repository import SessionRepository
+from app.services.ports.settings_repository import SettingsRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.user_repository import UserRepository
 from app.services.ports.variant_axis_repository import VariantAxisRepository
@@ -110,6 +112,7 @@ class SqlUnitOfWork:
             None
         )
         self._category_spec_versions: SqlCategorySpecVersionRepository | None = None
+        self._settings: SqlSettingsRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -211,6 +214,12 @@ class SqlUnitOfWork:
             self._category_spec_versions = SqlCategorySpecVersionRepository(self.session)
         return self._category_spec_versions
 
+    @property
+    def settings(self) -> SettingsRepository:
+        if self._settings is None:
+            self._settings = SqlSettingsRepository(self.session)
+        return self._settings
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -253,6 +262,7 @@ class SqlUnitOfWork:
             self._catalog_image_slots = None
             self._catalog_slot_input_requirements = None
             self._category_spec_versions = None
+            self._settings = None
 
 
 def make_unit_of_work_factory(

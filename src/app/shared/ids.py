@@ -22,6 +22,7 @@ VariantAxisValueId = NewType("VariantAxisValueId", uuid.UUID)
 InputImageSlotId = NewType("InputImageSlotId", uuid.UUID)
 CatalogImageSlotId = NewType("CatalogImageSlotId", uuid.UUID)
 CategorySpecVersionId = NewType("CategorySpecVersionId", uuid.UUID)
+SettingId = NewType("SettingId", uuid.UUID)
 
 
 def new_tenant_id() -> TenantId:
@@ -70,3 +71,7 @@ def new_catalog_image_slot_id() -> CatalogImageSlotId:
 
 def new_category_spec_version_id() -> CategorySpecVersionId:
     return CategorySpecVersionId(uuid.uuid4())
+
+
+def new_setting_id() -> SettingId:
+    return SettingId(uuid.uuid4())
