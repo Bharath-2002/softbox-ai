@@ -19,6 +19,7 @@ from app.bootstrap.settings import Settings, get_settings
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.infrastructure.observability.logging import configure_logging
 from app.infrastructure.persistence.database import create_engine, create_session_factory, ping
+from app.infrastructure.persistence.rate_limiter import SqlRateLimiter
 from app.shared.logging import get_logger
 
 _log = get_logger(__name__)
@@ -83,6 +84,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # not import infrastructure directly, so this is constructed here and
     # attached to app.state, the same pattern as the database engine above.
     app.state.token_issuer = AccessTokenCodec(settings.access_token_signing_key.get_secret_value())
+
+    # Read by app.api.deps.rate_limit.get_rate_limiter - same pattern.
+    app.state.rate_limiter = SqlRateLimiter(app.state.db_session_factory)
 
     # Ops endpoints sit outside the versioned prefix: probes should not have to
     # follow an API version bump.

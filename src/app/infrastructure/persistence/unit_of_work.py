@@ -23,7 +23,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from types import TracebackType
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.infrastructure.persistence.idempotency_repository import SqlIdempotencyRepository
@@ -33,6 +32,7 @@ from app.infrastructure.persistence.session_repository import SqlSessionReposito
 from app.infrastructure.persistence.tenant_membership_repository import (
     SqlTenantMembershipRepository,
 )
+from app.infrastructure.persistence.tenant_scope import bind_tenant
 from app.infrastructure.persistence.user_repository import SqlUserRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
@@ -41,8 +41,6 @@ from app.services.ports.session_repository import SessionRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.user_repository import UserRepository
 from app.shared.ids import TenantId
-
-_SET_TENANT = text("SELECT set_config('app.current_tenant', :tenant_id, true)")
 
 
 class SqlUnitOfWork:
@@ -118,7 +116,7 @@ class SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
         if self._tenant_id is not None:
-            await session.execute(_SET_TENANT, {"tenant_id": str(self._tenant_id)})
+            await bind_tenant(session, self._tenant_id)
         self._session = session
         return self
 

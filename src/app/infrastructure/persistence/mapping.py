@@ -141,6 +141,18 @@ idempotency_keys_table = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
+# No entity class - a counter, not a rich domain object. Queried via Core
+# directly by SqlRateLimiter.
+rate_limit_windows_table = Table(
+    "rate_limit_windows",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("bucket", Text(), nullable=False),
+    Column("window_start", DateTime(timezone=True), nullable=False),
+    Column("count", Integer(), nullable=False),
+)
+
 _mapped = False
 
 

@@ -10,8 +10,10 @@ global.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def utcnow() -> datetime:
@@ -25,3 +27,14 @@ class Clock(Protocol):
 class SystemClock:
     def now(self) -> datetime:
         return utcnow()
+
+
+def fixed_window_start(now: datetime, window: timedelta) -> datetime:
+    """Aligns ``now`` to the start of its fixed window, anchored to the Unix
+    epoch rather than to ``now`` itself — two calls landing in the same
+    wall-clock window always compute the same boundary regardless of which
+    one runs first. Shared by the real rate limiter adapter and its fake so
+    the window-alignment math has exactly one implementation for the
+    fake/real contract tests to actually be comparing (CLAUDE.md §10)."""
+    elapsed_windows = (now - _EPOCH) // window
+    return _EPOCH + elapsed_windows * window
