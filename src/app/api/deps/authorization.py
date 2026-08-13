@@ -5,7 +5,16 @@ first written — it only needs a ``Principal``, however one was obtained.
 ``get_current_principal`` is the piece that has: it now decodes the request's
 bearer access token via the ``TokenIssuer`` port (M1 chunk 4 commit 3),
 retiring the ``NotImplementedError`` placeholder that stood in its place
-until real tokens existed to verify.
+until real tokens existed to verify, and binds ``tenant_id`` to the logging
+context once it is known (M1 chunk 5) — the request-id-only binding
+``RequestContextMiddleware`` does happens before any principal exists, so
+this is the earliest point in the request that can add it.
+
+``require_tenant_context`` and ``require_platform_admin`` are the two
+plane-enforcing dependencies attached at router level to ``admin`` and
+``platform`` respectively (``api/routers/``) — every route mounted under
+either router is gated by construction, not by remembering to add a check
+per endpoint.
 
 No database lookup here — the whole point of the access token is that its
 claims (role, capabilities, platform-admin flag) were already resolved once,
@@ -28,8 +37,9 @@ from app.entities.principal import Principal
 from app.entities.roles import Role
 from app.services.ports.token_issuer import TokenIssuer
 from app.shared.clock import utcnow
-from app.shared.errors import AuthenticationError
+from app.shared.errors import AuthenticationError, PermissionDeniedError
 from app.shared.ids import TenantId, UserId
+from app.shared.logging import bind_request_context
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -52,16 +62,34 @@ async def get_current_principal(
 
     claims = token_issuer.decode(credentials.credentials, now=utcnow())
 
-    return Principal(
+    principal = Principal(
         user_id=UserId(UUID(claims.subject)),
         tenant_id=TenantId(UUID(claims.tenant_id)) if claims.tenant_id else None,
         role=Role(claims.role) if claims.role else None,
         capabilities=frozenset(claims.capabilities),
         is_platform_admin=claims.is_platform_admin,
     )
+    if principal.tenant_id is not None:
+        bind_request_context(tenant_id=str(principal.tenant_id))
+    return principal
 
 
 PrincipalDep = Annotated[Principal, Depends(get_current_principal)]
+
+
+async def require_tenant_context(principal: PrincipalDep) -> Principal:
+    """Gate for the ``admin`` router: authenticated, and acting within a
+    bound tenant. A platform-scoped token (no active tenant) is a 403 here,
+    not a 401 — it is authenticated, just the wrong plane for this route."""
+    if principal.tenant_id is None:
+        raise PermissionDeniedError("A tenant-scoped session is required.")
+    return principal
+
+
+async def require_platform_admin(principal: PrincipalDep) -> Principal:
+    """Gate for the ``platform`` router (D4)."""
+    principal.require_platform_admin()
+    return principal
 
 
 def require_capability(capability: Capability | str) -> Callable[[Principal], Awaitable[Principal]]:

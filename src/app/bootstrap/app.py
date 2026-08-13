@@ -14,6 +14,7 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api import health
 from app.api.errors import register_exception_handlers
 from app.api.middleware import RequestContextMiddleware
+from app.api.routers import admin, platform, public, webhooks
 from app.bootstrap.settings import Settings, get_settings
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.infrastructure.observability.logging import configure_logging
@@ -86,5 +87,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Ops endpoints sit outside the versioned prefix: probes should not have to
     # follow an API version bump.
     app.include_router(health.router)
+
+    # The four planes (CLAUDE.md §9). Each carries its own auth posture at
+    # router level (see app/api/routers/) - none of that lives here.
+    for router in (platform.router, admin.router, public.router, webhooks.router):
+        app.include_router(router, prefix=settings.api_prefix)
 
     return app

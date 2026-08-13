@@ -21,9 +21,15 @@ not the production code.
 from __future__ import annotations
 
 import pytest
+import structlog
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.api.deps.authorization import get_current_principal, require_capability
+from app.api.deps.authorization import (
+    get_current_principal,
+    require_capability,
+    require_platform_admin,
+    require_tenant_context,
+)
 from app.entities.capabilities import Capability
 from app.entities.principal import Principal
 from app.entities.roles import Role
@@ -100,6 +106,51 @@ async def test_an_invalid_token_is_rejected() -> None:
         await get_current_principal(_bearer("not-a-real-token"), codec)
 
 
+async def test_a_tenant_bound_token_binds_tenant_id_to_the_logging_context() -> None:
+    """The observability half of D3: RequestContextMiddleware binds
+    request_id before any principal exists, so this dependency is the
+    earliest point that can add tenant_id - and must actually do it, not
+    just be capable of it."""
+    codec = AccessTokenCodec(SIGNING_KEY)
+    tenant_id = new_tenant_id()
+    token = codec.encode(
+        AccessTokenClaims(
+            subject=str(new_user_id()),
+            tenant_id=str(tenant_id),
+            role="viewer",
+            capabilities=[],
+            is_platform_admin=False,
+        ),
+        now=utcnow(),
+    )
+    structlog.contextvars.clear_contextvars()
+
+    await get_current_principal(_bearer(token), codec)
+
+    assert structlog.contextvars.get_contextvars()["tenant_id"] == str(tenant_id)
+    structlog.contextvars.clear_contextvars()
+
+
+async def test_a_platform_scoped_token_binds_no_tenant_id() -> None:
+    codec = AccessTokenCodec(SIGNING_KEY)
+    token = codec.encode(
+        AccessTokenClaims(
+            subject=str(new_user_id()),
+            tenant_id=None,
+            role=None,
+            capabilities=[],
+            is_platform_admin=True,
+        ),
+        now=utcnow(),
+    )
+    structlog.contextvars.clear_contextvars()
+
+    await get_current_principal(_bearer(token), codec)
+
+    assert "tenant_id" not in structlog.contextvars.get_contextvars()
+    structlog.contextvars.clear_contextvars()
+
+
 async def test_require_capability_allows_a_principal_that_has_it() -> None:
     principal = Principal(
         user_id=new_user_id(),
@@ -125,3 +176,39 @@ async def test_require_capability_denies_a_principal_missing_it() -> None:
 
     with pytest.raises(PermissionDeniedError):
         await dependency(principal)
+
+
+async def test_require_tenant_context_allows_a_tenant_bound_principal() -> None:
+    principal = Principal(user_id=new_user_id(), tenant_id=new_tenant_id(), role=Role.VIEWER)
+
+    result = await require_tenant_context(principal)
+
+    assert result is principal
+
+
+async def test_require_tenant_context_denies_a_platform_only_principal() -> None:
+    """Authenticated but wrong plane - a 403, not a 401."""
+    principal = Principal(user_id=new_user_id(), tenant_id=None, role=None, is_platform_admin=True)
+
+    with pytest.raises(PermissionDeniedError, match="tenant-scoped session"):
+        await require_tenant_context(principal)
+
+
+async def test_require_platform_admin_allows_a_platform_admin() -> None:
+    principal = Principal(user_id=new_user_id(), tenant_id=None, role=None, is_platform_admin=True)
+
+    result = await require_platform_admin(principal)
+
+    assert result is principal
+
+
+async def test_require_platform_admin_denies_an_ordinary_tenant_member() -> None:
+    principal = Principal(
+        user_id=new_user_id(),
+        tenant_id=new_tenant_id(),
+        role=Role.OWNER,
+        is_platform_admin=False,
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        await require_platform_admin(principal)
