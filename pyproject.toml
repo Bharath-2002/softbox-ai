@@ -18,6 +18,7 @@ dependencies = [
     # Authlib's async OIDC client is httpx-backed - runtime dependency, not
     # just a test one, now that infrastructure/auth uses it.
     "httpx>=0.28",
+    "aiosmtplib>=3.0",
 ]
 
 [dependency-groups]
@@ -29,6 +30,7 @@ dev = [
     "import-linter>=2.1",
     "pre-commit>=4.0",
     "types-authlib>=1.7.2.20260807",
+    "aiosmtpd>=1.4",
 ]
 
 [build-system]

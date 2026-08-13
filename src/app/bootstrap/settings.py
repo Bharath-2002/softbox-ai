@@ -57,6 +57,17 @@ class Settings(BaseSettings):
         default=SecretStr("dev-only-access-token-signing-key-not-for-production-use"),
     )
 
+    # ── Email ────────────────────────────────────────────────────────────────
+    # "console" (log instead of sending) is the default - local dev and CI
+    # have no real SMTP credentials, and .env.example's SMTP_PASSWORD is a
+    # placeholder, not one.
+    email_backend: Literal["smtp", "console"] = "console"
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: SecretStr = Field(default=SecretStr(""))
+    email_from: str = "Softbox AI <no-reply@example.com>"
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def is_production(self) -> bool:

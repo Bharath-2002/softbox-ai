@@ -17,6 +17,8 @@ from app.api.middleware import RequestContextMiddleware
 from app.api.routers import admin, platform, public, webhooks
 from app.bootstrap.settings import Settings, get_settings
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
+from app.infrastructure.email.console_sender import ConsoleEmailSender
+from app.infrastructure.email.smtp_sender import SmtpEmailSender
 from app.infrastructure.observability.logging import configure_logging
 from app.infrastructure.persistence.database import create_engine, create_session_factory, ping
 from app.infrastructure.persistence.rate_limiter import SqlRateLimiter
@@ -87,6 +89,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Read by app.api.deps.rate_limit.get_rate_limiter - same pattern.
     app.state.rate_limiter = SqlRateLimiter(app.state.db_session_factory)
+
+    # Read by app.api.deps.email.get_email_sender - same pattern. "console"
+    # (the default) never touches a real SMTP relay - see ConsoleEmailSender.
+    if settings.email_backend == "smtp":
+        app.state.email_sender = SmtpEmailSender(
+            host=settings.smtp_host,
+            port=settings.smtp_port,
+            username=settings.smtp_user,
+            password=settings.smtp_password.get_secret_value(),
+            sender=settings.email_from,
+        )
+    else:
+        app.state.email_sender = ConsoleEmailSender()
 
     # Ops endpoints sit outside the versioned prefix: probes should not have to
     # follow an API version bump.
