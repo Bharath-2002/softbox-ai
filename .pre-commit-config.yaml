@@ -34,3 +34,13 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+
+      # Tests gate the commit rather than relying on anyone remembering to run
+      # them. If this ever becomes slow enough to tempt --no-verify, split the
+      # slow tests behind a marker instead of removing the hook.
+      - id: pytest
+        name: tests
+        entry: uv run pytest
+        language: system
+        pass_filenames: false
+        types: [python]
