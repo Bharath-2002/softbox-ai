@@ -12,7 +12,7 @@ import pytest
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition
 from app.entities.category import Category
 from app.features.taxonomy.publish_category_spec import PublishCategorySpec
-from app.shared.errors import NotFoundError
+from app.shared.errors import NotFoundError, ValidationError
 from app.shared.ids import new_category_id, new_tenant_id, new_user_id
 from tests.fakes.clock import FakeClock
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
@@ -113,3 +113,63 @@ async def test_republishing_only_stamps_newly_added_rows() -> None:
     published_category = await uow_factory.categories.get(tenant_id, category.id)
     assert published_category is not None
     assert published_category.current_spec_version == 2
+
+
+async def test_first_publish_change_summary_lists_every_row_as_added() -> None:
+    use_case, clock, uow_factory = _use_case()
+    tenant_id = new_tenant_id()
+    actor_id = new_user_id()
+    category = Category.create(
+        tenant_id, key="apparel", name="Apparel", slug="apparel", parent=None, now=clock.now()
+    )
+    fabric = AttributeDefinition.create(
+        tenant_id,
+        category.id,
+        key="fabric",
+        label="Fabric",
+        data_type=AttributeDataType.TEXT,
+        now=clock.now(),
+    )
+    await uow_factory.categories.add(category)
+    await uow_factory.attribute_definitions.add(fabric)
+
+    version = await use_case(tenant_id=tenant_id, category_id=category.id, actor_user_id=actor_id)
+
+    assert version.change_summary is not None
+    [change] = version.change_summary["changes"]
+    assert change["change_type"] == "added_optional"
+    assert change["key"] == "fabric"
+
+
+async def test_renaming_a_key_between_publishes_is_rejected() -> None:
+    use_case, clock, uow_factory = _use_case()
+    tenant_id = new_tenant_id()
+    actor_id = new_user_id()
+    category = Category.create(
+        tenant_id, key="apparel", name="Apparel", slug="apparel", parent=None, now=clock.now()
+    )
+    fabric = AttributeDefinition.create(
+        tenant_id,
+        category.id,
+        key="fabric",
+        label="Fabric",
+        data_type=AttributeDataType.TEXT,
+        now=clock.now(),
+    )
+    await uow_factory.categories.add(category)
+    await uow_factory.attribute_definitions.add(fabric)
+    await use_case(tenant_id=tenant_id, category_id=category.id, actor_user_id=actor_id)
+
+    # Same row, key changed in place - not a real feature yet (no Admin API),
+    # but the entity is a mutable dataclass and the repository exposes
+    # `update`, so this is exactly what a future rename attempt looks like.
+    fabric.key = "material"
+    await uow_factory.attribute_definitions.update(fabric)
+
+    with pytest.raises(ValidationError, match="not permitted"):
+        await use_case(tenant_id=tenant_id, category_id=category.id, actor_user_id=actor_id)
+
+    # Rejected before anything was written - still on version 1.
+    published_category = await uow_factory.categories.get(tenant_id, category.id)
+    assert published_category is not None
+    assert published_category.current_spec_version == 1

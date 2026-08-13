@@ -18,19 +18,25 @@ compute the same next version, and the constraint turns the loser's insert
 into a loud ``IntegrityError`` (rolling back its whole transaction, stamps
 included) rather than two rows silently claiming the same version.
 
-Change classification (D15's additive/required/retire/rename buckets) and
-``needs_attention`` propagation are the next chunk and M4 respectively — a
-category's first few publishes have no prior version to classify against,
-and nothing reads ``change_summary`` yet.
+The previous published snapshot (if any — a category's first publish has
+none) is classified against the freshly-built one
+(``spec_change_classification.classify_changes``). A ``RENAMED`` result
+rejects the whole publish before anything is written (D15: "not permitted
+— retire and add instead"); every other classified change is stored as
+``change_summary`` on the new row, informational only for now.
+``needs_attention`` propagation and the backfill-job offer act on
+``products``, which does not exist until M4 — deferred there.
 """
 
 from __future__ import annotations
 
 from app.entities.category_spec_version import CategorySpecVersion
 from app.services.ports.unit_of_work import UnitOfWorkFactory
+from app.services.spec_change_classification import SpecChangeType, classify_changes, summarize
+from app.services.spec_resolver import SpecResolver
 from app.services.spec_snapshot_builder import SpecSnapshotBuilder
 from app.shared.clock import Clock
-from app.shared.errors import NotFoundError
+from app.shared.errors import NotFoundError, ValidationError
 from app.shared.ids import CategoryId, TenantId, UserId
 
 
@@ -67,6 +73,20 @@ class PublishCategorySpec:
             previous_version = category.current_spec_version
             next_version = (previous_version or 0) + 1
 
+            previous_snapshot = None
+            if previous_version is not None:
+                previous_snapshot = await SpecResolver(
+                    uow.category_spec_versions
+                ).resolve_published(tenant_id, category_id, previous_version)
+
+            changes = classify_changes(previous_snapshot, snapshot)
+            renamed = [c for c in changes if c.change_type is SpecChangeType.RENAMED]
+            if renamed:
+                offenders = ", ".join(f"{c.previous_key!r} -> {c.key!r}" for c in renamed)
+                raise ValidationError(
+                    f"Renaming a key is not permitted (D15) — retire and add instead: {offenders}"
+                )
+
             for definition in await uow.attribute_definitions.list_for_category(
                 tenant_id, category_id
             ):
@@ -98,6 +118,7 @@ class PublishCategorySpec:
                 snapshot=snapshot,
                 published_by=actor_user_id,
                 now=now,
+                change_summary=summarize(changes) if changes else None,
             )
             await uow.category_spec_versions.add(version)
 
