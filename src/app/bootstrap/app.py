@@ -14,14 +14,17 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api import health
 from app.api.errors import register_exception_handlers
 from app.api.middleware import RequestContextMiddleware
-from app.api.routers import admin, platform, public, webhooks
+from app.api.routers import admin, auth, platform, public, webhooks
 from app.bootstrap.settings import Settings, get_settings
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
+from app.infrastructure.auth.oidc_provider import AuthlibIdentityProvider
 from app.infrastructure.email.console_sender import ConsoleEmailSender
 from app.infrastructure.email.smtp_sender import SmtpEmailSender
 from app.infrastructure.observability.logging import configure_logging
 from app.infrastructure.persistence.database import create_engine, create_session_factory, ping
 from app.infrastructure.persistence.rate_limiter import SqlRateLimiter
+from app.infrastructure.persistence.unit_of_work import make_unit_of_work_factory
+from app.shared.clock import SystemClock
 from app.shared.logging import get_logger
 
 _log = get_logger(__name__)
@@ -82,6 +85,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db_session_factory = create_session_factory(engine)
     health.register_readiness_check(app, "database", lambda: ping(engine))
 
+    # Read by app.bootstrap.di - the use-case-constructing dependencies for
+    # /auth/* need both, and building repositories per-request calls for a
+    # UnitOfWorkFactory (one transaction per use case call), not a shared
+    # UnitOfWork instance.
+    app.state.uow_factory = make_unit_of_work_factory(app.state.db_session_factory)
+    app.state.clock = SystemClock()
+
     # Read by app.api.deps.authorization.get_token_issuer - the api layer may
     # not import infrastructure directly, so this is constructed here and
     # attached to app.state, the same pattern as the database engine above.
@@ -103,13 +113,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     else:
         app.state.email_sender = ConsoleEmailSender()
 
+    # Read by app.bootstrap.di.get_google_identity_provider. Constructing
+    # this never makes a network call (Authlib's OAuth().register() only
+    # stores config; load_server_metadata is fetched lazily on first real
+    # use) - safe to always build, even with an empty google_client_id in
+    # local/test/CI where Google SSO is not configured.
+    app.state.google_identity_provider = AuthlibIdentityProvider(
+        provider_name="google",
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret.get_secret_value(),
+        server_metadata_url=settings.google_discovery_url,
+    )
+
     # Ops endpoints sit outside the versioned prefix: probes should not have to
     # follow an API version bump.
     app.include_router(health.router)
 
-    # The four planes (CLAUDE.md §9). Each carries its own auth posture at
-    # router level (see app/api/routers/) - none of that lives here.
-    for router in (platform.router, admin.router, public.router, webhooks.router):
+    # The four planes (CLAUDE.md §9), plus `auth` - a fifth, deliberate
+    # addition (see app/api/routers/auth.py's module docstring and
+    # docs/ARCHITECTURE.md's router table). Each carries its own auth
+    # posture at router level (see app/api/routers/) - none of that lives
+    # here.
+    for router in (platform.router, admin.router, public.router, webhooks.router, auth.router):
         app.include_router(router, prefix=settings.api_prefix)
 
     return app

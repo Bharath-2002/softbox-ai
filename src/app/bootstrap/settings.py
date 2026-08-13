@@ -57,6 +57,22 @@ class Settings(BaseSettings):
         default=SecretStr("dev-only-access-token-signing-key-not-for-production-use"),
     )
 
+    # Google's discovery document is a fixed, well-known URL, not a secret -
+    # kept overridable (a non-Google IdP in a future test, a different
+    # Google Cloud project) rather than hardcoded in the adapter.
+    google_client_id: str = ""
+    google_client_secret: SecretStr = Field(default=SecretStr(""))
+    google_discovery_url: str = "https://accounts.google.com/.well-known/openid-configuration"
+
+    # Users whose email lands here are granted platform_admin on login if
+    # they do not already have it (CompleteLogin's bootstrap_admin_emails) -
+    # an explicit, operator-configured allowlist, not domain inference,
+    # consistent with D4's "explicit grant, never inferred". This solves an
+    # otherwise-real chicken-and-egg problem: nothing in the system can grant
+    # the first platform admin without one already existing to do the
+    # granting.
+    admin_emails: tuple[str, ...] = ()
+
     # ── Email ────────────────────────────────────────────────────────────────
     # "console" (log instead of sending) is the default - local dev and CI
     # have no real SMTP credentials, and .env.example's SMTP_PASSWORD is a

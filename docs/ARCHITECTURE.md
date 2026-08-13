@@ -797,7 +797,16 @@ Versioned REST, OpenAPI-generated clients, `application/problem+json` errors, cu
                       generation, approval queue, channels, settings, usage
 /api/v1/public/*      Storefront read API — tenant resolved from Host header; cached, ETagged
 /api/v1/webhooks/*    Inbound: provider callbacks, upload verification
+/api/v1/auth/*        Google SSO login, refresh, logout — no principal exists yet on any of
+                      these routes, so it is neither platform, admin, public, nor webhooks
 ```
+
+**A fifth router, added in M1's email/SSO chunk, not in the original four above.** Login fits none
+of them: `admin` requires an already-bound tenant, `platform` requires an already-established
+platform-admin principal, `public` is the shopper-facing storefront (and will resolve its tenant
+from the Host header once that lands), and `webhooks` is inbound provider callbacks authenticated
+by signature, not a session. `auth` carries no router-level auth dependency — by construction, since
+its job is to produce the credential every other router checks, not require one.
 
 The existing React app consumes `/api/v1/public/*`. Its current `src/data/products.js` maps to
 `GET /public/products` almost field-for-field; `categoryCopy` becomes category-level attributes;

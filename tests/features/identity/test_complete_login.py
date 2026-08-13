@@ -184,6 +184,101 @@ async def test_the_issued_access_token_carries_no_tenant_and_no_capabilities() -
     assert decoded.capabilities == []
 
 
+async def test_an_allowlisted_email_is_granted_platform_admin_on_first_login() -> None:
+    """No second login required, unlike the manually-granted case below -
+    the allowlist grant must apply within the same transaction as the very
+    first login that creates the user."""
+    provider = FakeIdentityProvider("google")
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
+    uow_factory = FakeUnitOfWorkFactory()
+    codec = AccessTokenCodec(SIGNING_KEY)
+    use_case = CompleteLogin(
+        provider,
+        codec,
+        uow_factory,
+        clock,
+        bootstrap_admin_emails=frozenset({"person@example.com"}),
+    )
+    provider.register_code("code-1", _claims(email="person@example.com"))
+
+    result = await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    assert await uow_factory.platform_admins.is_admin(result.user_id) is True
+    decoded = codec.decode(result.access_token, now=clock.now())
+    assert decoded.is_platform_admin is True
+
+
+async def test_allowlist_comparison_is_case_insensitive() -> None:
+    provider = FakeIdentityProvider("google")
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
+    uow_factory = FakeUnitOfWorkFactory()
+    codec = AccessTokenCodec(SIGNING_KEY)
+    use_case = CompleteLogin(
+        provider,
+        codec,
+        uow_factory,
+        clock,
+        bootstrap_admin_emails=frozenset({"person@example.com"}),
+    )
+    provider.register_code("code-1", _claims(email="Person@Example.com"))
+
+    result = await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    assert await uow_factory.platform_admins.is_admin(result.user_id) is True
+
+
+async def test_a_non_allowlisted_email_is_not_granted_platform_admin() -> None:
+    provider = FakeIdentityProvider("google")
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
+    uow_factory = FakeUnitOfWorkFactory()
+    codec = AccessTokenCodec(SIGNING_KEY)
+    use_case = CompleteLogin(
+        provider,
+        codec,
+        uow_factory,
+        clock,
+        bootstrap_admin_emails=frozenset({"someone-else@example.com"}),
+    )
+    provider.register_code("code-1", _claims(email="person@example.com"))
+
+    result = await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    assert await uow_factory.platform_admins.is_admin(result.user_id) is False
+
+
+async def test_logging_in_twice_with_an_allowlisted_email_does_not_error() -> None:
+    """The grant is ON CONFLICT DO NOTHING at the repository level - a
+    second login must not raise on the already-granted case."""
+    provider = FakeIdentityProvider("google")
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
+    uow_factory = FakeUnitOfWorkFactory()
+    codec = AccessTokenCodec(SIGNING_KEY)
+    use_case = CompleteLogin(
+        provider,
+        codec,
+        uow_factory,
+        clock,
+        bootstrap_admin_emails=frozenset({"person@example.com"}),
+    )
+    provider.register_code("code-1", _claims(email="person@example.com"))
+    provider.register_code("code-2", _claims(email="person@example.com"))
+
+    await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+    result = await use_case(
+        code="code-2", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    assert await uow_factory.platform_admins.is_admin(result.user_id) is True
+
+
 async def test_a_platform_admin_gets_the_flag_on_their_token() -> None:
     use_case, provider, clock, uow_factory = _use_case()
     provider.register_code("code-1", _claims())
