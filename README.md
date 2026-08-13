@@ -15,12 +15,15 @@ Sarees are the first vertical, not a special case.
 
 ## Status
 
-**Architecture approved. Implementation not started.**
+**M1 (Foundations) in progress.** Layer skeleton, settings, structured logging, health probes,
+and the database foundation with row-level tenant isolation are in place and tested against a
+real Postgres.
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 24 numbered decisions, schema, layering rules,
   pipeline state machines, delivery plan
 - [docs/DIAGRAMS.md](docs/DIAGRAMS.md) — application flow, state machines, architecture and ER
   diagrams
+- [CHECKLIST.md](CHECKLIST.md) *(not tracked in git — local working file)* — build progress
 
 ## Stack
 
@@ -46,5 +49,20 @@ enforced by `import-linter` contracts in CI, not by convention. See
 
 ## Development
 
-Not yet scaffolded. Milestone M1 in the delivery plan covers project setup, the layer skeleton,
-CI contracts, database and RLS harness, and SSO.
+Requires a local Postgres 16 and [uv](https://docs.astral.sh/uv/). No Docker — see
+[ARCHITECTURE.md D19](docs/ARCHITECTURE.md) for why the queue and local dev are Postgres-only.
+
+```sh
+uv sync                                                            # install dependencies
+PGHOST=localhost PGUSER=<your-superuser> ./scripts/bootstrap_local_db.sh  # roles + databases, idempotent
+cp .env.example .env
+uv run alembic upgrade head                                        # migrate softbox (dev)
+SOFTBOX_MIGRATIONS_DATABASE_URL=postgresql+asyncpg://softbox_owner:softbox_owner_dev_only@localhost:5432/softbox_test \
+    uv run alembic upgrade head                                    # migrate softbox_test (tests)
+make check                                                          # lint, types, contracts, tests
+```
+
+`make check` runs everything CI runs: `ruff` format + lint, `mypy --strict`, the `import-linter`
+architectural contracts, and the full test suite — including the tenant-isolation tests, which
+connect as the non-owner `softbox_app` role against real row-level security policies rather than
+a mock. See [CLAUDE.md](CLAUDE.md) for the engineering rules this codebase follows.

@@ -12,10 +12,39 @@ concurrency:
 env:
   # Keep in step with .python-version and pyproject's requires-python.
   PYTHON_VERSION: "3.12"
+  PGHOST: localhost
+  PGPORT: 5432
+  PGUSER: postgres
+  PGPASSWORD: postgres
+  SOFTBOX_OWNER_PASSWORD: softbox_owner_dev_only
+  SOFTBOX_APP_PASSWORD: softbox_app_dev_only
+  SOFTBOX_MIGRATIONS_DATABASE_URL: postgresql+asyncpg://softbox_owner:softbox_owner_dev_only@localhost:5432/softbox_test
+  SOFTBOX_TEST_OWNER_DATABASE_URL: postgresql+asyncpg://softbox_owner:softbox_owner_dev_only@localhost:5432/softbox_test
+  SOFTBOX_TEST_APP_DATABASE_URL: postgresql+asyncpg://softbox_app:softbox_app_dev_only@localhost:5432/softbox_test
 
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    # Real Postgres, not testcontainers - this project has no container
+    # runtime available anywhere it runs (see CHECKLIST.md M1), so local dev
+    # and CI both point TEST_DATABASE_URL-style vars at a real Postgres. This
+    # keeps the tenant isolation suite honest: it exercises actual RLS
+    # policies against actual roles, not an approximation.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,8 +58,8 @@ jobs:
 
       - name: Lint
         run: |
-          uv run ruff format --check src tests
-          uv run ruff check src tests
+          uv run ruff format --check src tests migrations
+          uv run ruff check src tests migrations
 
       - name: Types
         run: uv run mypy
@@ -39,6 +68,15 @@ jobs:
       # step so a violation is obvious in the job summary rather than buried.
       - name: Import contracts
         run: uv run lint-imports
+
+      # Same script as local dev (scripts/bootstrap_local_db.sh) - one code
+      # path for provisioning roles and databases, not a CI-only variant that
+      # could silently drift from what a developer's machine does.
+      - name: Provision database roles
+        run: ./scripts/bootstrap_local_db.sh
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
 
       - name: Tests
         run: uv run pytest

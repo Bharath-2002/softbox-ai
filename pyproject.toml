@@ -74,7 +74,13 @@ disallow_any_generics = true
 no_implicit_reexport = true
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
-packages = ["app"]
+# `files`, not `packages` - mypy will not accept both, and `files` lets us
+# additionally check migrations/, which sits outside the `app` package.
+# Version scripts are excluded: one-off DDL run once and never edited again,
+# where the friction of strict-typing every historical migration outweighs
+# the value - unlike migrations/rls.py and env.py, which are real, reused code.
+files = ["src/app", "migrations"]
+exclude = ["^migrations/versions/"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]

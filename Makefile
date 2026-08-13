@@ -8,12 +8,12 @@ install: ## Sync dependencies and install the project
 	uv sync
 
 fmt: ## Format
-	uv run ruff format src tests
-	uv run ruff check --fix src tests
+	uv run ruff format src tests migrations
+	uv run ruff check --fix src tests migrations
 
 lint: ## Lint (no fixes)
-	uv run ruff format --check src tests
-	uv run ruff check src tests
+	uv run ruff format --check src tests migrations
+	uv run ruff check src tests migrations
 
 types: ## Type-check
 	uv run mypy
@@ -21,7 +21,13 @@ types: ## Type-check
 contracts: ## Verify the architectural import contracts
 	uv run lint-imports
 
-test: ## Run tests
+db-up: ## Provision local Postgres roles and databases (idempotent)
+	PGHOST=$${PGHOST:-localhost} PGUSER=$${PGUSER:-$$(whoami)} ./scripts/bootstrap_local_db.sh
+
+migrate: ## Apply migrations to the dev database
+	uv run alembic upgrade head
+
+test: ## Run tests (needs db-up + migrate against softbox_test first)
 	uv run pytest
 
 check: lint types contracts test ## Everything CI runs

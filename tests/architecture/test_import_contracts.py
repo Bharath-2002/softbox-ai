@@ -81,6 +81,12 @@ def test_contracts_pass_on_the_real_tree() -> None:
             "import fastapi  # noqa: F401\n",
             id="services-may-not-import-fastapi",
         ),
+        pytest.param(
+            "infra_does_not_import_bootstrap",
+            SRC / "app" / "infrastructure" / "_violation.py",
+            "from app import bootstrap  # noqa: F401\n",
+            id="infrastructure-may-not-import-bootstrap",
+        ),
     ],
 )
 def test_contract_catches_a_deliberate_violation(
