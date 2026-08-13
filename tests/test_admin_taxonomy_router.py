@@ -275,3 +275,28 @@ async def test_a_platform_only_token_is_rejected_by_the_admin_plane() -> None:
         response = await http.get("/api/v1/admin/categories", headers=headers)
 
     assert response.status_code == 403
+
+
+async def test_tenant_b_cannot_read_tenant_as_category_over_http() -> None:
+    """The fake ``UnitOfWork`` correctly partitions its rows by the
+    ``tenant_id`` argument each repository call actually receives - what it
+    does *not* prove on its own is that the route extracts the caller's own
+    ``principal.tenant_id`` from the verified token and passes that into the
+    use case, rather than something else. This pins that at the HTTP
+    boundary, the same layer a real cross-tenant leak would happen at."""
+    app, uow_factory, clock, codec = _build()
+    tenant_a = TenantId(uuid.UUID(str(new_tenant_id())))
+    category = Category.create(
+        tenant_a, key="apparel", name="Apparel", slug="apparel", parent=None, now=clock.now()
+    )
+    await uow_factory.categories.add(category)
+    tenant_b_headers = _bearer(
+        codec, tenant_id=str(new_tenant_id()), role="admin", capabilities=["taxonomy.manage"]
+    )
+
+    async with await _client(app) as http:
+        response = await http.get(
+            f"/api/v1/admin/categories/{category.id}", headers=tenant_b_headers
+        )
+
+    assert response.status_code == 404
