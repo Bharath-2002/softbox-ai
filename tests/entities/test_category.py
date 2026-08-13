@@ -49,6 +49,17 @@ def test_a_grandchild_categorys_path_carries_the_whole_ancestor_chain() -> None:
     assert grandchild.path == f"{root.id}.{child.id}.{grandchild.id}"
 
 
+def test_ancestor_ids_is_root_to_leaf_self_included() -> None:
+    tenant_id = new_tenant_id()
+    root = Category.create(tenant_id, key="a", name="A", slug="a", parent=None, now=utcnow())
+    mid = Category.create(tenant_id, key="b", name="B", slug="b", parent=root, now=utcnow())
+    leaf = Category.create(tenant_id, key="c", name="C", slug="c", parent=mid, now=utcnow())
+
+    assert root.ancestor_ids() == [root.id]
+    assert mid.ancestor_ids() == [root.id, mid.id]
+    assert leaf.ancestor_ids() == [root.id, mid.id, leaf.id]
+
+
 def test_a_new_category_is_active_with_no_published_or_draft_spec() -> None:
     category = Category.create(
         new_tenant_id(), key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()

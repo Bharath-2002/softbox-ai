@@ -18,6 +18,7 @@ parent at creation time.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -78,3 +79,9 @@ class Category:
             created_at=now,
             updated_at=now,
         )
+
+    def ancestor_ids(self) -> list[CategoryId]:
+        """Root-to-leaf, self included — parsed from ``path`` rather than a
+        database round trip per ancestor. This is what
+        ``app.services.spec_inheritance.resolve_inherited`` walks."""
+        return [CategoryId(uuid.UUID(part)) for part in self.path.split(".")]
