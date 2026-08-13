@@ -26,6 +26,7 @@ from types import TracebackType
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.infrastructure.persistence.audit_log_repository import SqlAuditLogRepository
+from app.infrastructure.persistence.category_repository import SqlCategoryRepository
 from app.infrastructure.persistence.idempotency_repository import SqlIdempotencyRepository
 from app.infrastructure.persistence.identity_repository import SqlIdentityRepository
 from app.infrastructure.persistence.platform_admin_repository import SqlPlatformAdminRepository
@@ -36,6 +37,7 @@ from app.infrastructure.persistence.tenant_membership_repository import (
 from app.infrastructure.persistence.tenant_scope import bind_tenant
 from app.infrastructure.persistence.user_repository import SqlUserRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
+from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
@@ -70,6 +72,7 @@ class SqlUnitOfWork:
         self._sessions: SqlSessionRepository | None = None
         self._idempotency_keys: SqlIdempotencyRepository | None = None
         self._audit_log: SqlAuditLogRepository | None = None
+        self._categories: SqlCategoryRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -121,6 +124,12 @@ class SqlUnitOfWork:
             self._audit_log = SqlAuditLogRepository(self.session)
         return self._audit_log
 
+    @property
+    def categories(self) -> CategoryRepository:
+        if self._categories is None:
+            self._categories = SqlCategoryRepository(self.session)
+        return self._categories
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -155,6 +164,7 @@ class SqlUnitOfWork:
             self._sessions = None
             self._idempotency_keys = None
             self._audit_log = None
+            self._categories = None
 
 
 def make_unit_of_work_factory(

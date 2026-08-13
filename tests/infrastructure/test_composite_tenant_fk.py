@@ -97,6 +97,85 @@ async def test_session_cannot_claim_a_tenant_the_user_does_not_belong_to(
             )
 
 
+INSERT_CATEGORY = text(
+    "INSERT INTO categories "
+    "(id, tenant_id, parent_id, path, depth, key, name, slug, position, is_active, "
+    "created_at, updated_at) "
+    "VALUES (:id, :tenant_id, :parent_id, :path, :depth, :key, :name, :slug, 0, true, "
+    "now(), now())"
+)
+
+
+async def test_a_category_cannot_claim_a_parent_from_another_tenant(owner_uow: UowFactory) -> None:
+    """``categories (tenant_id, parent_id)`` -> ``categories (tenant_id, id)``
+    (D10, D2) - the first composite foreign key in this schema between two
+    RLS-forced tables, not merely into a global one. A child row must belong
+    to the same tenant as the parent it claims.
+
+    Unlike ``sessions``/``tenant_memberships`` above, ``categories`` is
+    itself RLS-forced (FORCE applies to the owner role too) - each insert
+    below binds the tenant its own row is tagged as, purely to satisfy
+    ``WITH CHECK`` and let the composite FK be the thing that actually gets
+    exercised, rather than being masked by an RLS rejection first."""
+    tenant_a = new_tenant_id()
+    tenant_b = new_tenant_id()
+    parent_in_a = uuid.uuid4()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_a), "slug": str(uuid.uuid4())})
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_b), "slug": str(uuid.uuid4())})
+
+    async with owner_uow(tenant_a) as uow:
+        await uow.session.execute(
+            INSERT_CATEGORY,
+            {
+                "id": str(parent_in_a),
+                "tenant_id": str(tenant_a),
+                "parent_id": None,
+                "path": str(parent_in_a),
+                "depth": 0,
+                "key": "root",
+                "name": "Root",
+                "slug": f"root-{uuid.uuid4()}",
+            },
+        )
+
+    # A child within tenant A, pointing at tenant A's own root: succeeds.
+    child_in_a = uuid.uuid4()
+    async with owner_uow(tenant_a) as uow:
+        await uow.session.execute(
+            INSERT_CATEGORY,
+            {
+                "id": str(child_in_a),
+                "tenant_id": str(tenant_a),
+                "parent_id": str(parent_in_a),
+                "path": f"{parent_in_a}.{child_in_a}",
+                "depth": 1,
+                "key": "child",
+                "name": "Child",
+                "slug": f"child-{uuid.uuid4()}",
+            },
+        )
+
+    # A row tagged as tenant B, claiming tenant A's root as its parent:
+    # rejected by the composite FK, not merely inconsistent application state.
+    with pytest.raises(DBAPIError, match="violates foreign key constraint"):
+        async with owner_uow(tenant_b) as uow:
+            await uow.session.execute(
+                INSERT_CATEGORY,
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": str(tenant_b),
+                    "parent_id": str(parent_in_a),
+                    "path": f"{parent_in_a}.{uuid.uuid4()}",
+                    "depth": 1,
+                    "key": "child",
+                    "name": "Child",
+                    "slug": f"child-{uuid.uuid4()}",
+                },
+            )
+
+
 async def test_session_with_no_tenant_bypasses_the_membership_check(owner_uow: UowFactory) -> None:
     """A platform-plane session with no active tenant has nothing to satisfy
     - a composite FK is not checked when any column in it is NULL."""

@@ -48,6 +48,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import registry
 
+from app.entities.category import Category
 from app.entities.identity import Identity
 from app.entities.roles import Role
 from app.entities.session import Session
@@ -131,6 +132,26 @@ audit_log_table = Table(
     Column("occurred_at", DateTime(timezone=True), nullable=False),
 )
 
+categories_table = Table(
+    "categories",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("parent_id", Uuid(), nullable=True),
+    Column("path", Text(), nullable=False),
+    Column("depth", Integer(), nullable=False),
+    Column("key", Text(), nullable=False),
+    Column("name", Text(), nullable=False),
+    Column("slug", Text(), nullable=False),
+    Column("description", Text(), nullable=True),
+    Column("position", Integer(), nullable=False),
+    Column("is_active", Boolean(), nullable=False),
+    Column("current_spec_version", Integer(), nullable=True),
+    Column("draft_spec_version", Integer(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -182,4 +203,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(Identity, identities_table)
     mapper_registry.map_imperatively(TenantMembership, tenant_memberships_table)
     mapper_registry.map_imperatively(Session, sessions_table)
+    mapper_registry.map_imperatively(Category, categories_table)
     _mapped = True

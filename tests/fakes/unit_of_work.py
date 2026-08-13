@@ -15,6 +15,7 @@ from types import TracebackType
 
 from app.shared.ids import TenantId
 from tests.fakes.audit_log_repository import InMemoryAuditLogRepository
+from tests.fakes.category_repository import InMemoryCategoryRepository
 from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
 from tests.fakes.identity_repository import InMemoryIdentityRepository
 from tests.fakes.platform_admin_repository import InMemoryPlatformAdminRepository
@@ -34,6 +35,7 @@ class FakeUnitOfWork:
         sessions: InMemorySessionRepository,
         idempotency_keys: InMemoryIdempotencyRepository,
         audit_log: InMemoryAuditLogRepository,
+        categories: InMemoryCategoryRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -44,6 +46,7 @@ class FakeUnitOfWork:
         self.sessions = sessions
         self.idempotency_keys = idempotency_keys
         self.audit_log = audit_log
+        self.categories = categories
         self.committed = False
         self.rolled_back = False
 
@@ -76,6 +79,7 @@ class FakeUnitOfWorkFactory:
         self.sessions = InMemorySessionRepository()
         self.idempotency_keys = InMemoryIdempotencyRepository()
         self.audit_log = InMemoryAuditLogRepository()
+        self.categories = InMemoryCategoryRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -86,6 +90,7 @@ class FakeUnitOfWorkFactory:
             sessions=self.sessions,
             idempotency_keys=self.idempotency_keys,
             audit_log=self.audit_log,
+            categories=self.categories,
             tenant_id=tenant_id,
         )
 

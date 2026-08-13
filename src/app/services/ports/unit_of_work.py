@@ -36,6 +36,7 @@ from types import TracebackType
 from typing import Protocol
 
 from app.services.ports.audit_log_repository import AuditLogRepository
+from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
@@ -66,6 +67,9 @@ class UnitOfWork(Protocol):
 
     @property
     def audit_log(self) -> AuditLogRepository: ...
+
+    @property
+    def categories(self) -> CategoryRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

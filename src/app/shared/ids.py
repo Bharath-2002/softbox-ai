@@ -15,6 +15,7 @@ UserId = NewType("UserId", uuid.UUID)
 IdentityId = NewType("IdentityId", uuid.UUID)
 TenantMembershipId = NewType("TenantMembershipId", uuid.UUID)
 SessionId = NewType("SessionId", uuid.UUID)
+CategoryId = NewType("CategoryId", uuid.UUID)
 
 
 def new_tenant_id() -> TenantId:
@@ -35,3 +36,7 @@ def new_tenant_membership_id() -> TenantMembershipId:
 
 def new_session_id() -> SessionId:
     return SessionId(uuid.uuid4())
+
+
+def new_category_id() -> CategoryId:
+    return CategoryId(uuid.uuid4())
