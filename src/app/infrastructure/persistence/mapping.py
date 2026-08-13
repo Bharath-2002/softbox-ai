@@ -45,7 +45,7 @@ from sqlalchemy import (
     Text,
     Uuid,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import registry
 
 from app.entities.identity import Identity
@@ -111,6 +111,24 @@ sessions_table = Table(
     Column("expires_at", DateTime(timezone=True), nullable=False),
     Column("revoked_at", DateTime(timezone=True), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+# No entity class - an append-only log row, not a rich domain object.
+# Queried via Core directly by SqlAuditLogRepository. Table created in
+# ca5759119d91 (chunk 3); this is the first repository built for it.
+audit_log_table = Table(
+    "audit_log",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("actor_user_id", Uuid(), nullable=True),
+    Column("action", Text(), nullable=False),
+    Column("subject_type", Text(), nullable=False),
+    Column("subject_id", Uuid(), nullable=False),
+    Column("before", JSONB(), nullable=True),
+    Column("after", JSONB(), nullable=True),
+    Column("ip", INET(), nullable=True),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
 )
 
 # No entity class - a grant, not a rich domain object. Queried via Core
