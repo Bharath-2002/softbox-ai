@@ -15,6 +15,7 @@ from app.api import health
 from app.api.errors import register_exception_handlers
 from app.api.middleware import RequestContextMiddleware
 from app.bootstrap.settings import Settings, get_settings
+from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.infrastructure.observability.logging import configure_logging
 from app.infrastructure.persistence.database import create_engine, create_session_factory, ping
 from app.shared.logging import get_logger
@@ -76,6 +77,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db_engine = engine
     app.state.db_session_factory = create_session_factory(engine)
     health.register_readiness_check(app, "database", lambda: ping(engine))
+
+    # Read by app.api.deps.authorization.get_token_issuer - the api layer may
+    # not import infrastructure directly, so this is constructed here and
+    # attached to app.state, the same pattern as the database engine above.
+    app.state.token_issuer = AccessTokenCodec(settings.access_token_signing_key.get_secret_value())
 
     # Ops endpoints sit outside the versioned prefix: probes should not have to
     # follow an API version bump.

@@ -26,6 +26,18 @@ from types import TracebackType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.infrastructure.persistence.identity_repository import SqlIdentityRepository
+from app.infrastructure.persistence.platform_admin_repository import SqlPlatformAdminRepository
+from app.infrastructure.persistence.session_repository import SqlSessionRepository
+from app.infrastructure.persistence.tenant_membership_repository import (
+    SqlTenantMembershipRepository,
+)
+from app.infrastructure.persistence.user_repository import SqlUserRepository
+from app.services.ports.identity_repository import IdentityRepository
+from app.services.ports.platform_admin_repository import PlatformAdminRepository
+from app.services.ports.session_repository import SessionRepository
+from app.services.ports.tenant_membership_repository import TenantMembershipRepository
+from app.services.ports.user_repository import UserRepository
 from app.shared.ids import TenantId
 
 _SET_TENANT = text("SELECT set_config('app.current_tenant', :tenant_id, true)")
@@ -46,6 +58,14 @@ class SqlUnitOfWork:
         self._session_factory = session_factory
         self._tenant_id = tenant_id
         self._session: AsyncSession | None = None
+        # Built lazily, once, on first access - repositories are cheap,
+        # stateless wrappers around the session, but there is no reason to
+        # rebuild one every time a use case touches the same property twice.
+        self._users: SqlUserRepository | None = None
+        self._identities: SqlIdentityRepository | None = None
+        self._platform_admins: SqlPlatformAdminRepository | None = None
+        self._tenant_memberships: SqlTenantMembershipRepository | None = None
+        self._sessions: SqlSessionRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -54,6 +74,36 @@ class SqlUnitOfWork:
         if self._session is None:
             raise RuntimeError("SqlUnitOfWork used outside its `async with` block")
         return self._session
+
+    @property
+    def users(self) -> UserRepository:
+        if self._users is None:
+            self._users = SqlUserRepository(self.session)
+        return self._users
+
+    @property
+    def identities(self) -> IdentityRepository:
+        if self._identities is None:
+            self._identities = SqlIdentityRepository(self.session)
+        return self._identities
+
+    @property
+    def platform_admins(self) -> PlatformAdminRepository:
+        if self._platform_admins is None:
+            self._platform_admins = SqlPlatformAdminRepository(self.session)
+        return self._platform_admins
+
+    @property
+    def tenant_memberships(self) -> TenantMembershipRepository:
+        if self._tenant_memberships is None:
+            self._tenant_memberships = SqlTenantMembershipRepository(self.session)
+        return self._tenant_memberships
+
+    @property
+    def sessions(self) -> SessionRepository:
+        if self._sessions is None:
+            self._sessions = SqlSessionRepository(self.session)
+        return self._sessions
 
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
@@ -78,6 +128,15 @@ class SqlUnitOfWork:
         finally:
             await session.close()
             self._session = None
+            # Each cached repository holds the now-closed session; drop them
+            # so a defensive re-entry (not the normal case - the factory
+            # hands out a fresh instance each time) cannot return one bound
+            # to a dead connection.
+            self._users = None
+            self._identities = None
+            self._platform_admins = None
+            self._tenant_memberships = None
+            self._sessions = None
 
 
 def make_unit_of_work_factory(

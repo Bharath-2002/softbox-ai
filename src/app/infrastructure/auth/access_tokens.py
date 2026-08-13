@@ -1,7 +1,7 @@
-"""Our own short-lived JWT access tokens (D4) — the stateless half of "short-lived
-JWT access tokens plus rotating refresh tokens". The refresh half is
-``Session``/``SessionRepository``; this is what ``get_current_principal``
-verifies on every request, with no database lookup.
+"""Implements ``app.services.ports.token_issuer.TokenIssuer`` with a JWT (D4)
+— the stateless half of "short-lived JWT access tokens plus rotating refresh
+tokens". The refresh half is ``Session``/``SessionRepository``; this is what
+``get_current_principal`` verifies on every request, with no database lookup.
 
 Two details that are easy to get subtly wrong with JWTs, both handled
 explicitly rather than left to a library default:
@@ -25,7 +25,6 @@ explicitly rather than left to a library default:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -33,19 +32,11 @@ from joserfc import jwt
 from joserfc.jwk import OctKey
 from joserfc.jwt import JWTClaimsRegistry
 
+from app.services.ports.token_issuer import AccessTokenClaims
 from app.shared.errors import AuthenticationError
 
 _ALGORITHM = "HS256"
 _ISSUER = "softbox-ai"
-
-
-@dataclass(frozen=True)
-class AccessTokenClaims:
-    subject: str
-    tenant_id: str | None
-    role: str | None
-    capabilities: list[str]
-    is_platform_admin: bool
 
 
 class AccessTokenCodec:

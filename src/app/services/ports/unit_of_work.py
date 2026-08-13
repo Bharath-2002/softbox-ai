@@ -9,6 +9,25 @@ transaction, before any tenant-scoped query runs.
 ``tenant_id=None`` is for genuinely tenant-free work — platform-plane
 operations, and the migrations/bootstrap paths that run as the owner role.
 Everything else must pass a tenant.
+
+Repositories are properties on the open ``UnitOfWork``
+(``uow.users``, ``uow.sessions``, ...), not separate constructor arguments a
+use case is handed alongside it. The alternative — inject each repository
+into the use case's constructor, already bound to a session — only works if
+something constructs that session *before* the use case runs and hands
+repositories and the ``UnitOfWork`` the same one. Nothing in this codebase
+does that (``SqlUnitOfWork`` owns its own session, created in
+``__aenter__``), and building that per-request-session plumbing now would
+mean rewriting every already-shipped, already-tested caller of
+``SqlUnitOfWork`` to fit a session it does not yet have when constructed.
+Properties on the open unit of work need none of that — each is built lazily
+from ``self.session`` once ``__aenter__`` has run, additively, and match the
+classic "Unit of Work exposes its repositories" pattern directly.
+
+This list grows by one property per repository as new ones are added — an
+open-ended surface, accepted deliberately as the cost of not rewriting
+already-shipped code for a different pattern that has no other advantage
+here.
 """
 
 from __future__ import annotations
@@ -16,10 +35,30 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Protocol
 
+from app.services.ports.identity_repository import IdentityRepository
+from app.services.ports.platform_admin_repository import PlatformAdminRepository
+from app.services.ports.session_repository import SessionRepository
+from app.services.ports.tenant_membership_repository import TenantMembershipRepository
+from app.services.ports.user_repository import UserRepository
 from app.shared.ids import TenantId
 
 
 class UnitOfWork(Protocol):
+    @property
+    def users(self) -> UserRepository: ...
+
+    @property
+    def identities(self) -> IdentityRepository: ...
+
+    @property
+    def platform_admins(self) -> PlatformAdminRepository: ...
+
+    @property
+    def tenant_memberships(self) -> TenantMembershipRepository: ...
+
+    @property
+    def sessions(self) -> SessionRepository: ...
+
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""
         ...

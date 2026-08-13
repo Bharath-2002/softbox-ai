@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     cors_origins: tuple[str, ...] = ()
 
+    # ── Auth (D4) ────────────────────────────────────────────────────────────
+    # HS256 signing key for our own access tokens (app.infrastructure.auth.
+    # access_tokens) - never the OIDC provider's credentials, which are
+    # per-provider config not yet added (no route constructs an
+    # IdentityProvider yet; that lands with the /auth/* routers).
+    access_token_signing_key: SecretStr = Field(
+        default=SecretStr("dev-only-access-token-signing-key-not-for-production-use"),
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def is_production(self) -> bool:

@@ -6,7 +6,8 @@ from datetime import timedelta
 
 import pytest
 
-from app.infrastructure.auth.access_tokens import AccessTokenClaims, AccessTokenCodec
+from app.infrastructure.auth.access_tokens import AccessTokenCodec
+from app.services.ports.token_issuer import AccessTokenClaims
 from app.shared.clock import utcnow
 from app.shared.errors import AuthenticationError
 
