@@ -42,6 +42,7 @@ from app.services.ports.catalog_slot_input_requirement_repository import (
     CatalogSlotInputRequirementRepository,
 )
 from app.services.ports.category_repository import CategoryRepository
+from app.services.ports.category_spec_version_repository import CategorySpecVersionRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.input_image_slot_repository import InputImageSlotRepository
@@ -96,6 +97,9 @@ class UnitOfWork(Protocol):
 
     @property
     def catalog_slot_input_requirements(self) -> CatalogSlotInputRequirementRepository: ...
+
+    @property
+    def category_spec_versions(self) -> CategorySpecVersionRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

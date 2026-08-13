@@ -36,6 +36,9 @@ from app.infrastructure.persistence.catalog_slot_input_requirement_repository im
     SqlCatalogSlotInputRequirementRepository,
 )
 from app.infrastructure.persistence.category_repository import SqlCategoryRepository
+from app.infrastructure.persistence.category_spec_version_repository import (
+    SqlCategorySpecVersionRepository,
+)
 from app.infrastructure.persistence.idempotency_repository import SqlIdempotencyRepository
 from app.infrastructure.persistence.identity_repository import SqlIdentityRepository
 from app.infrastructure.persistence.input_image_slot_repository import (
@@ -59,6 +62,7 @@ from app.services.ports.catalog_slot_input_requirement_repository import (
     CatalogSlotInputRequirementRepository,
 )
 from app.services.ports.category_repository import CategoryRepository
+from app.services.ports.category_spec_version_repository import CategorySpecVersionRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.input_image_slot_repository import InputImageSlotRepository
@@ -105,6 +109,7 @@ class SqlUnitOfWork:
         self._catalog_slot_input_requirements: SqlCatalogSlotInputRequirementRepository | None = (
             None
         )
+        self._category_spec_versions: SqlCategorySpecVersionRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -200,6 +205,12 @@ class SqlUnitOfWork:
             )
         return self._catalog_slot_input_requirements
 
+    @property
+    def category_spec_versions(self) -> CategorySpecVersionRepository:
+        if self._category_spec_versions is None:
+            self._category_spec_versions = SqlCategorySpecVersionRepository(self.session)
+        return self._category_spec_versions
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -241,6 +252,7 @@ class SqlUnitOfWork:
             self._input_image_slots = None
             self._catalog_image_slots = None
             self._catalog_slot_input_requirements = None
+            self._category_spec_versions = None
 
 
 def make_unit_of_work_factory(

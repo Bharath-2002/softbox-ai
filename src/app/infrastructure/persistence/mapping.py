@@ -51,6 +51,7 @@ from sqlalchemy.orm import registry
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
 from app.entities.catalog_slot_input_requirement import CatalogSlotInputRequirement
 from app.entities.category import Category
+from app.entities.category_spec_version import CategorySpecVersion, SpecVersionStatus
 from app.entities.identity import Identity
 from app.entities.image_slots import CatalogImageSlot, InputImageSlot
 from app.entities.roles import Role
@@ -78,6 +79,14 @@ _data_type_type = Enum(
 _semantic_role_type = Enum(
     SemanticRole,
     name="attribute_definition_semantic_role",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_spec_version_status_type = Enum(
+    SpecVersionStatus,
+    name="category_spec_version_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -277,6 +286,20 @@ catalog_slot_input_requirements_table = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
+category_spec_versions_table = Table(
+    "category_spec_versions",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("category_id", Uuid(), nullable=False),
+    Column("version", Integer(), nullable=False),
+    Column("status", _spec_version_status_type, nullable=False),
+    Column("snapshot", JSONB(), nullable=False),
+    Column("change_summary", JSONB(), nullable=True),
+    Column("published_by", Uuid(), nullable=False),
+    Column("published_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -337,4 +360,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(
         CatalogSlotInputRequirement, catalog_slot_input_requirements_table
     )
+    mapper_registry.map_imperatively(CategorySpecVersion, category_spec_versions_table)
     _mapped = True

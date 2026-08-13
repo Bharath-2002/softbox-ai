@@ -96,6 +96,12 @@ class AttributeModelCache:
     ``spec_version`` for a given category always implies the same
     definitions. Callers still mid-draft (no spec version minted yet) should
     not use this cache at all; compile directly instead.
+
+    The immutability this relies on is enforced at
+    ``services.ports.category_spec_version_repository.CategorySpecVersionRepository``
+    — that port has no ``update`` method, so no code path can mutate a
+    published row's snapshot. If that ever changes, this cache can return a
+    stale compiled model with no test failing anywhere else.
     """
 
     def __init__(self) -> None:

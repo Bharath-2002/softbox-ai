@@ -527,6 +527,50 @@ async def test_a_requirement_cannot_claim_an_input_slot_from_another_tenant(
             )
 
 
+INSERT_CATEGORY_SPEC_VERSION = text(
+    "INSERT INTO category_spec_versions "
+    "(id, tenant_id, category_id, version, status, snapshot, published_by, published_at) "
+    "VALUES (:id, :tenant_id, :category_id, :version, 'published', '{}', :published_by, now())"
+)
+
+
+async def test_a_category_spec_version_cannot_claim_a_category_from_another_tenant(
+    owner_uow: UowFactory,
+) -> None:
+    """``category_spec_versions (tenant_id, category_id)`` -> ``categories
+    (tenant_id, id)`` (D15, D2) - same composite-FK shape as
+    ``attribute_definitions`` and ``variant_axes``."""
+    tenant_a = new_tenant_id()
+    tenant_b = new_tenant_id()
+    user_id = new_user_id()
+
+    async with owner_uow(None) as uow:
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_a), "slug": str(uuid.uuid4())})
+        await uow.session.execute(INSERT_TENANT, {"id": str(tenant_b), "slug": str(uuid.uuid4())})
+        await uow.session.execute(
+            INSERT_USER, {"id": str(user_id), "email": f"{user_id}@example.com"}
+        )
+
+    category_in_a = Category.create(
+        tenant_a, key="apparel", name="Apparel", slug="apparel", parent=None, now=utcnow()
+    )
+    async with owner_uow(tenant_a) as uow:
+        await uow.categories.add(category_in_a)
+
+    with pytest.raises(DBAPIError, match="violates foreign key constraint"):
+        async with owner_uow(tenant_b) as uow:
+            await uow.session.execute(
+                INSERT_CATEGORY_SPEC_VERSION,
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": str(tenant_b),
+                    "category_id": str(category_in_a.id),
+                    "version": 1,
+                    "published_by": str(user_id),
+                },
+            )
+
+
 async def test_session_with_no_tenant_bypasses_the_membership_check(owner_uow: UowFactory) -> None:
     """A platform-plane session with no active tenant has nothing to satisfy
     - a composite FK is not checked when any column in it is NULL."""

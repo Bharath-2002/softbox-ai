@@ -21,6 +21,7 @@ from tests.fakes.catalog_slot_input_requirement_repository import (
     InMemoryCatalogSlotInputRequirementRepository,
 )
 from tests.fakes.category_repository import InMemoryCategoryRepository
+from tests.fakes.category_spec_version_repository import InMemoryCategorySpecVersionRepository
 from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
 from tests.fakes.identity_repository import InMemoryIdentityRepository
 from tests.fakes.input_image_slot_repository import InMemoryInputImageSlotRepository
@@ -50,6 +51,7 @@ class FakeUnitOfWork:
         input_image_slots: InMemoryInputImageSlotRepository,
         catalog_image_slots: InMemoryCatalogImageSlotRepository,
         catalog_slot_input_requirements: InMemoryCatalogSlotInputRequirementRepository,
+        category_spec_versions: InMemoryCategorySpecVersionRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -67,6 +69,7 @@ class FakeUnitOfWork:
         self.input_image_slots = input_image_slots
         self.catalog_image_slots = catalog_image_slots
         self.catalog_slot_input_requirements = catalog_slot_input_requirements
+        self.category_spec_versions = category_spec_versions
         self.committed = False
         self.rolled_back = False
 
@@ -106,6 +109,7 @@ class FakeUnitOfWorkFactory:
         self.input_image_slots = InMemoryInputImageSlotRepository()
         self.catalog_image_slots = InMemoryCatalogImageSlotRepository()
         self.catalog_slot_input_requirements = InMemoryCatalogSlotInputRequirementRepository()
+        self.category_spec_versions = InMemoryCategorySpecVersionRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -123,6 +127,7 @@ class FakeUnitOfWorkFactory:
             input_image_slots=self.input_image_slots,
             catalog_image_slots=self.catalog_image_slots,
             catalog_slot_input_requirements=self.catalog_slot_input_requirements,
+            category_spec_versions=self.category_spec_versions,
             tenant_id=tenant_id,
         )
 
