@@ -24,6 +24,7 @@ from app.api.deps.authorization import get_token_issuer
 from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
+from app.features.identity.start_impersonation import StartImpersonation
 from app.services.ports.identity_provider import IdentityProvider
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
@@ -75,6 +76,15 @@ def get_logout(uow_factory: UowFactoryDep, clock: ClockDep) -> Logout:
     return Logout(uow_factory, clock)
 
 
+def get_start_impersonation(
+    token_issuer: Annotated[TokenIssuer, Depends(get_token_issuer)],
+    uow_factory: UowFactoryDep,
+    clock: ClockDep,
+) -> StartImpersonation:
+    return StartImpersonation(token_issuer, uow_factory, clock)
+
+
 CompleteLoginDep = Annotated[CompleteLogin, Depends(get_complete_login)]
 RefreshSessionDep = Annotated[RefreshSession, Depends(get_refresh_session)]
 LogoutDep = Annotated[Logout, Depends(get_logout)]
+StartImpersonationDep = Annotated[StartImpersonation, Depends(get_start_impersonation)]

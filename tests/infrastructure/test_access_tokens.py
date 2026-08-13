@@ -47,6 +47,17 @@ def test_encode_then_decode_round_trips() -> None:
     assert decoded.role == "admin"
     assert decoded.capabilities == ["catalog.publish"]
     assert decoded.is_platform_admin is False
+    assert decoded.impersonated_by is None
+
+
+def test_impersonated_by_round_trips() -> None:
+    codec = _codec()
+    now = utcnow()
+    token = codec.encode(_claims(impersonated_by="admin-user-1"), now=now)
+
+    decoded = codec.decode(token, now=now)
+
+    assert decoded.impersonated_by == "admin-user-1"
 
 
 def test_platform_scoped_token_has_no_tenant_or_role() -> None:

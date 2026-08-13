@@ -21,6 +21,12 @@ class AccessTokenClaims:
     role: str | None
     capabilities: list[str]
     is_platform_admin: bool
+    # Set only on a token minted by StartImpersonation - the real platform
+    # admin's user id, distinct from `subject` (the impersonated user). Never
+    # set together with is_platform_admin=True: an impersonation token acts
+    # with the target's own standing, not the admin's platform-wide power
+    # (see StartImpersonation's module docstring).
+    impersonated_by: str | None = None
 
 
 class TokenIssuer(Protocol):

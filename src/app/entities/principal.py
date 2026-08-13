@@ -8,7 +8,14 @@ Two planes, kept structurally separate rather than one flat permission set:
   the same "explicit grant, never inferred" discipline D4 applies to the
   admin grant itself applies again one level down: platform-admin status
   alone is not sufficient for a tenant action either. The audited,
-  time-boxed exception is impersonation (not yet built), not this flag.
+  time-boxed exception is impersonation (``StartImpersonation``), which is
+  what ``impersonated_by`` marks below.
+
+``impersonated_by`` is set only on a principal resolved from an
+impersonation token: the real platform admin's id, distinct from
+``user_id`` (the impersonated target). Such a principal always has
+``is_platform_admin=False`` — impersonation grants the target's own
+standing, never the admin's platform-wide power on top of it.
 
 ``capabilities`` is ``frozenset[str]``, not ``frozenset[Capability]`` — a
 membership's ``extra_capabilities`` (see ``TenantMembership``) is deliberately
@@ -35,6 +42,7 @@ class Principal:
     role: Role | None
     capabilities: frozenset[str] = field(default_factory=frozenset)
     is_platform_admin: bool = False
+    impersonated_by: UserId | None = None
 
     def has_capability(self, capability: Capability | str) -> bool:
         return str(capability) in self.capabilities

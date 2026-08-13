@@ -68,6 +68,7 @@ async def get_current_principal(
         role=Role(claims.role) if claims.role else None,
         capabilities=frozenset(claims.capabilities),
         is_platform_admin=claims.is_platform_admin,
+        impersonated_by=UserId(UUID(claims.impersonated_by)) if claims.impersonated_by else None,
     )
     if principal.tenant_id is not None:
         bind_request_context(tenant_id=str(principal.tenant_id))

@@ -99,6 +99,47 @@ async def test_a_platform_scoped_token_resolves_with_no_tenant_or_role() -> None
     assert principal.is_platform_admin is True
 
 
+async def test_an_impersonation_token_resolves_impersonated_by() -> None:
+    codec = AccessTokenCodec(SIGNING_KEY)
+    admin_id = new_user_id()
+    target_id = new_user_id()
+    tenant_id = new_tenant_id()
+    token = codec.encode(
+        AccessTokenClaims(
+            subject=str(target_id),
+            tenant_id=str(tenant_id),
+            role="viewer",
+            capabilities=[],
+            is_platform_admin=False,
+            impersonated_by=str(admin_id),
+        ),
+        now=utcnow(),
+    )
+
+    principal = await get_current_principal(_bearer(token), codec)
+
+    assert principal.user_id == target_id
+    assert principal.impersonated_by == admin_id
+
+
+async def test_an_ordinary_token_resolves_no_impersonated_by() -> None:
+    codec = AccessTokenCodec(SIGNING_KEY)
+    token = codec.encode(
+        AccessTokenClaims(
+            subject=str(new_user_id()),
+            tenant_id=None,
+            role=None,
+            capabilities=[],
+            is_platform_admin=True,
+        ),
+        now=utcnow(),
+    )
+
+    principal = await get_current_principal(_bearer(token), codec)
+
+    assert principal.impersonated_by is None
+
+
 async def test_an_invalid_token_is_rejected() -> None:
     codec = AccessTokenCodec(SIGNING_KEY)
 

@@ -56,6 +56,7 @@ class AccessTokenCodec:
             "role": claims.role,
             "capabilities": claims.capabilities,
             "is_platform_admin": claims.is_platform_admin,
+            "impersonated_by": claims.impersonated_by,
             "iss": _ISSUER,
             "iat": int(now.timestamp()),
             "exp": int((now + self._ttl).timestamp()),
@@ -82,4 +83,5 @@ class AccessTokenCodec:
             role=claims.get("role"),
             capabilities=list(claims.get("capabilities") or []),
             is_platform_admin=bool(claims.get("is_platform_admin", False)),
+            impersonated_by=claims.get("impersonated_by"),
         )
