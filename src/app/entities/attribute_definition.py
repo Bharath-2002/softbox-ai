@@ -10,16 +10,27 @@ tenant-defined fields as structurally meaningful (price must sort, title
 must go in a caption) without hardcoding what a tenant calls them. Projecting
 a role into a real column (``products.price_amount``, ...) is D11's write
 path, out of scope until M4 has a ``products`` table to project into.
+
+``key`` is constrained to a valid Python-identifier-safe, lowercase pattern
+at creation time — it is used as a ``products.attributes`` JSONB key, a
+runtime Pydantic field name (``services/attribute_model_compiler.py``), and
+a prompt placeholder (``{{attr.fabric}}``, D14). Catching a bad key here, at
+definition time, is cheaper than it failing in one of those three places
+later — the same reasoning as D14a's "validate at analysis time."
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from app.shared.errors import ValidationError
 from app.shared.ids import AttributeDefinitionId, CategoryId, TenantId, new_attribute_definition_id
+
+_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class AttributeDataType(StrEnum):
@@ -88,6 +99,12 @@ class AttributeDefinition:
         ui: dict[str, Any] | None = None,
         default_value: Any | None = None,
     ) -> AttributeDefinition:
+        if not _KEY_PATTERN.match(key):
+            raise ValidationError(
+                f"Attribute key {key!r} must be lowercase, start with a letter, and contain only "
+                "letters, digits and underscores.",
+                code="invalid_attribute_key",
+            )
         return AttributeDefinition(
             id=new_attribute_definition_id(),
             tenant_id=tenant_id,

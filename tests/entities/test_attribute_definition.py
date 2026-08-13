@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
 from app.shared.clock import utcnow
+from app.shared.errors import ValidationError
 from app.shared.ids import new_category_id, new_tenant_id
 
 
@@ -53,3 +56,31 @@ def test_a_semantic_role_can_be_attached() -> None:
     assert definition.semantic_role == SemanticRole.PRICE
     assert definition.is_required is True
     assert definition.is_filterable is True
+
+
+@pytest.mark.parametrize(
+    "bad_key", ["Fabric", "1fabric", "fabric type", "fabric-type", "fabric.type", ""]
+)
+def test_a_key_that_is_not_a_safe_identifier_is_rejected(bad_key: str) -> None:
+    with pytest.raises(ValidationError, match="Attribute key"):
+        AttributeDefinition.create(
+            new_tenant_id(),
+            new_category_id(),
+            key=bad_key,
+            label="Fabric",
+            data_type=AttributeDataType.TEXT,
+            now=utcnow(),
+        )
+
+
+def test_a_lowercase_snake_case_key_is_accepted() -> None:
+    definition = AttributeDefinition.create(
+        new_tenant_id(),
+        new_category_id(),
+        key="fabric_type_2",
+        label="Fabric type",
+        data_type=AttributeDataType.TEXT,
+        now=utcnow(),
+    )
+
+    assert definition.key == "fabric_type_2"
