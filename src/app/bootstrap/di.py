@@ -69,6 +69,7 @@ from app.features.templates.create_authored_template import CreateAuthoredTempla
 from app.features.templates.create_template_from_upload import CreateTemplateFromUpload
 from app.features.templates.fail_template_analysis import FailTemplateAnalysis
 from app.features.templates.list_templates import ListTemplates
+from app.features.templates.seed_stock_presets import SeedStockPresets
 from app.features.templates.start_template_analysis import StartTemplateAnalysis
 from app.services.ports.content_moderation import ContentModerationScanner
 from app.services.ports.identity_provider import IdentityProvider
@@ -313,6 +314,10 @@ def get_archive_template(uow_factory: UowFactoryDep, clock: ClockDep) -> Archive
     return ArchiveTemplate(uow_factory, clock)
 
 
+def get_seed_stock_presets(uow_factory: UowFactoryDep, clock: ClockDep) -> SeedStockPresets:
+    return SeedStockPresets(uow_factory, clock)
+
+
 def get_start_template_analysis(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> StartTemplateAnalysis:
@@ -401,4 +406,5 @@ CreateTemplateFromUploadDep = Annotated[
 ]
 ListTemplatesDep = Annotated[ListTemplates, Depends(get_list_templates)]
 ArchiveTemplateDep = Annotated[ArchiveTemplate, Depends(get_archive_template)]
+SeedStockPresetsDep = Annotated[SeedStockPresets, Depends(get_seed_stock_presets)]
 TemplateAnalysisAgentDep = Annotated[TemplateAnalysisAgent, Depends(get_template_analysis_agent)]

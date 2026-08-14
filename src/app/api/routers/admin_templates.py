@@ -27,6 +27,7 @@ from app.bootstrap.di import (
     CreateAuthoredTemplateDep,
     CreateTemplateFromUploadDep,
     ListTemplatesDep,
+    SeedStockPresetsDep,
     TemplateAnalysisAgentDep,
 )
 from app.entities.capabilities import Capability
@@ -123,6 +124,29 @@ async def create_template_from_upload(
         actor_user_id=principal.user_id,
     )
     return TemplateResponse.from_entity(template)
+
+
+@router.post(
+    "/catalog-image-slots/{slot_id}/templates/seed-stock-presets",
+    response_model=list[TemplateResponse],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=_manage,
+)
+async def seed_stock_presets(
+    slot_id: CatalogImageSlotId, principal: PrincipalDep, use_case: SeedStockPresetsDep
+) -> list[TemplateResponse]:
+    """Manually seeds the stock scene preset library (D0) onto a catalog
+    image slot. No automatic trigger exists for this yet — there is no
+    tenant-provisioning flow in this codebase at all (out of scope until
+    M9), so an admin calls this explicitly per catalog slot rather than it
+    firing on tenant or catalog-slot creation."""
+    assert principal.tenant_id is not None
+    templates = await use_case(
+        tenant_id=principal.tenant_id,
+        catalog_image_slot_id=slot_id,
+        actor_user_id=principal.user_id,
+    )
+    return [TemplateResponse.from_entity(t) for t in templates]
 
 
 @router.get(

@@ -146,6 +146,28 @@ async def test_creating_an_authored_template_requires_template_manage() -> None:
     assert response.status_code == 403
 
 
+async def test_seeding_stock_presets_over_http() -> None:
+    app, uow_factory, _clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    slot = await _seed_slot(uow_factory, tenant_id)
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["template.manage"]
+    )
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/catalog-image-slots/{slot.id}/templates/seed-stock-presets",
+            headers=headers,
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert len(body) > 0
+    assert all(t["status"] == "analysed" for t in body)
+    assert all(t["kind"] == "authored_scene" for t in body)
+
+
 async def test_the_full_upload_then_analyse_then_archive_flow() -> None:
     app, uow_factory, clock, codec, storage = _build()
     tenant_id_str = str(new_tenant_id())
