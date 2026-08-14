@@ -33,13 +33,19 @@ from app.api.deps.vision_analysis import get_vision_analysis
 from app.features.assets.request_download import RequestDownload
 from app.features.assets.request_upload import RequestUpload
 from app.features.assets.verify_and_register_upload import VerifyAndRegisterUpload
+from app.features.generation.approve_catalog_image import ApproveCatalogImage
+from app.features.generation.bulk_approve_catalog_images_for_product import (
+    BulkApproveCatalogImagesForProduct,
+)
 from app.features.generation.complete_catalog_image_qc import CompleteCatalogImageQc
 from app.features.generation.complete_generation_item_render import CompleteGenerationItemRender
 from app.features.generation.fail_catalog_image_qc import FailCatalogImageQc
 from app.features.generation.fail_generation_item_render import FailGenerationItemRender
+from app.features.generation.list_catalog_images_for_review import ListCatalogImagesForReview
 from app.features.generation.reconcile_generation_requests_for_tenant import (
     ReconcileGenerationRequestsForTenant,
 )
+from app.features.generation.reject_catalog_image import RejectCatalogImage
 from app.features.generation.start_catalog_image_qc import StartCatalogImageQc
 from app.features.generation.start_generation_item_render import StartGenerationItemRender
 from app.features.identity.complete_login import CompleteLogin
@@ -495,6 +501,26 @@ def get_catalog_image_qc_agent(
     return CatalogImageQcAgent(start, complete, fail, object_storage, quality_control)
 
 
+def get_approve_catalog_image(uow_factory: UowFactoryDep, clock: ClockDep) -> ApproveCatalogImage:
+    return ApproveCatalogImage(uow_factory, clock)
+
+
+def get_reject_catalog_image(uow_factory: UowFactoryDep, clock: ClockDep) -> RejectCatalogImage:
+    return RejectCatalogImage(uow_factory, clock)
+
+
+def get_list_catalog_images_for_review(
+    uow_factory: UowFactoryDep,
+) -> ListCatalogImagesForReview:
+    return ListCatalogImagesForReview(uow_factory)
+
+
+def get_bulk_approve_catalog_images_for_product(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> BulkApproveCatalogImagesForProduct:
+    return BulkApproveCatalogImagesForProduct(uow_factory, clock)
+
+
 def get_reap_stuck_task_queue_jobs(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> ReapStuckTaskQueueJobs:
@@ -595,4 +621,12 @@ ReapStuckTaskQueueJobsDep = Annotated[
 ]
 ReconcileGenerationRequestsForTenantDep = Annotated[
     ReconcileGenerationRequestsForTenant, Depends(get_reconcile_generation_requests_for_tenant)
+]
+ApproveCatalogImageDep = Annotated[ApproveCatalogImage, Depends(get_approve_catalog_image)]
+RejectCatalogImageDep = Annotated[RejectCatalogImage, Depends(get_reject_catalog_image)]
+ListCatalogImagesForReviewDep = Annotated[
+    ListCatalogImagesForReview, Depends(get_list_catalog_images_for_review)
+]
+BulkApproveCatalogImagesForProductDep = Annotated[
+    BulkApproveCatalogImagesForProduct, Depends(get_bulk_approve_catalog_images_for_product)
 ]
