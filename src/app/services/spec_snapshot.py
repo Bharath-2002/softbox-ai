@@ -111,6 +111,19 @@ def _serialize_catalog_image_slot(
     }
 
 
+def find_catalog_slot(
+    snapshot: dict[str, Any], catalog_image_slot_id: str
+) -> dict[str, Any] | None:
+    """Looks up one ``catalog_image_slots[]`` entry by id within an already
+    -resolved snapshot. Shared by ``template_placeholder_validator`` and
+    ``prompt_rendering`` — both need to find "this catalog slot's
+    ``input_requirements``" before they can do anything else with it."""
+    for slot in snapshot.get("catalog_image_slots", []):
+        if slot["id"] == catalog_image_slot_id:
+            return dict(slot)
+    return None
+
+
 def build_snapshot(
     *,
     attribute_definitions: list[AttributeDefinition],

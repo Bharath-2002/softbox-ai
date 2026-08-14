@@ -28,6 +28,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.services.spec_snapshot import find_catalog_slot
+
 _ANY_PLACEHOLDER_PATTERN = re.compile(r"\{\{(.*?)\}\}")
 _WELL_FORMED_PATTERN = re.compile(r"^\s*([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)\s*$")
 _NAMESPACES = frozenset({"input", "attr", "variant"})
@@ -38,7 +40,7 @@ def validate_template_placeholders(
 ) -> list[str]:
     """Returns a list of human-readable problems. An empty list means every
     placeholder resolved — the template may reach ``analysed``."""
-    catalog_slot = _find_catalog_slot(snapshot, catalog_image_slot_id)
+    catalog_slot = find_catalog_slot(snapshot, catalog_image_slot_id)
     if catalog_slot is None:
         return [f"Catalog image slot {catalog_image_slot_id!r} not found in this spec."]
 
@@ -76,12 +78,3 @@ def validate_template_placeholders(
             )
 
     return problems
-
-
-def _find_catalog_slot(
-    snapshot: dict[str, Any], catalog_image_slot_id: str
-) -> dict[str, Any] | None:
-    for slot in snapshot.get("catalog_image_slots", []):
-        if slot["id"] == catalog_image_slot_id:
-            return dict(slot)
-    return None

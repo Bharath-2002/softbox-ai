@@ -1,0 +1,2 @@
+garment_body: Bunched detail, front-facing
+border_detail: Border trim, flat
