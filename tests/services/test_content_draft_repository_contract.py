@@ -191,6 +191,23 @@ async def test_add_then_get_round_trips(ctx: Context) -> None:
     assert fetched.superseded_by is None
 
 
+async def test_a_widened_status_value_round_trips_through_update(ctx: Context) -> None:
+    """`ContentDraftStatus` widened from a single member (`GENERATED`) to
+    four (`migrations/versions/e88d14230ad4_...`). This proves the mapping
+    round-trips a *second* value too, not just the one every other test in
+    this file happens to exercise."""
+    draft = _draft(ctx)
+    await ctx.drafts.add(draft)
+    draft.mark_pending_approval(now=utcnow())
+    draft.approve(approved_by=None, now=utcnow())
+    await ctx.drafts.update(draft)
+
+    fetched = await ctx.drafts.get(ctx.tenant_id, draft.id)
+    assert fetched is not None
+    assert fetched.status is ContentDraftStatus.APPROVED
+    assert fetched.approved_at is not None
+
+
 async def test_get_live_finds_the_row_with_no_superseded_by(ctx: Context) -> None:
     draft = _draft(ctx)
     await ctx.drafts.add(draft)

@@ -96,7 +96,7 @@ async def test_a_successful_generation_creates_a_content_draft() -> None:
     draft = await agent.run(tenant_id=tenant_id)
 
     assert draft is not None
-    assert draft.status.value == "generated"
+    assert draft.status.value == "pending_approval"
     assert len(text_generation.calls) == 1
 
 

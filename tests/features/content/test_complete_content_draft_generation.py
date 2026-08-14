@@ -5,11 +5,22 @@ from datetime import UTC, datetime
 from tests.fakes.clock import FakeClock
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
 
+from app.entities.category import Category
+from app.entities.product import Product
+from app.entities.product_variant import ProductVariant
+from app.entities.setting import Setting, SettingScope
 from app.features.content.complete_content_draft_generation import (
     CompleteContentDraftGeneration,
 )
 from app.services.ports.text_generation import GeneratedCopy
-from app.shared.ids import new_product_variant_id, new_tenant_id
+from app.shared.ids import (
+    CategoryId,
+    ProductVariantId,
+    TenantId,
+    new_category_spec_version_id,
+    new_tenant_id,
+    new_user_id,
+)
 
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -36,10 +47,34 @@ async def _job_id(uow_factory: FakeUnitOfWorkFactory, tenant_id: object) -> obje
     )
 
 
-async def test_clean_copy_creates_a_content_draft_and_completes_the_job() -> None:
-    use_case, uow_factory = _use_case()
+async def _seed_variant(
+    uow_factory: FakeUnitOfWorkFactory,
+) -> tuple[TenantId, ProductVariantId, CategoryId]:
     tenant_id = new_tenant_id()
-    variant_id = new_product_variant_id()
+    user_id = new_user_id()
+    category = Category.create(
+        tenant_id, key="sarees", name="Sarees", slug="sarees", parent=None, now=_NOW
+    )
+    await uow_factory.categories.add(category)
+    product = Product.create(
+        tenant_id,
+        category.id,
+        new_category_spec_version_id(),
+        attributes={},
+        created_by=user_id,
+        now=_NOW,
+    )
+    await uow_factory.products.add(product)
+    variant = ProductVariant.create(
+        tenant_id, product.id, axis_values={}, created_by=user_id, now=_NOW
+    )
+    await uow_factory.product_variants.add(variant)
+    return tenant_id, variant.id, category.id
+
+
+async def test_clean_copy_creates_a_pending_approval_draft_and_completes_the_job() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, variant_id, _category_id = await _seed_variant(uow_factory)
     job_id = await _job_id(uow_factory, tenant_id)
 
     draft = await use_case(
@@ -53,7 +88,7 @@ async def test_clean_copy_creates_a_content_draft_and_completes_the_job() -> Non
     )
 
     assert draft is not None
-    assert draft.status.value == "generated"
+    assert draft.status.value == "pending_approval"
     assert draft.body == "Crafted with care."
     stored = await uow_factory.content_drafts.get(tenant_id, draft.id)
     assert stored is not None
@@ -64,10 +99,67 @@ async def test_clean_copy_creates_a_content_draft_and_completes_the_job() -> Non
     assert len(entries) == 1
 
 
+async def test_auto_approves_when_approval_is_disabled_for_the_category() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, variant_id, category_id = await _seed_variant(uow_factory)
+    await uow_factory.settings.add(
+        Setting.create(
+            scope_type=SettingScope.CATEGORY,
+            tenant_id=tenant_id,
+            scope_id=category_id,
+            key="approval.required",
+            value=False,
+            now=_NOW,
+        )
+    )
+    job_id = await _job_id(uow_factory, tenant_id)
+
+    draft = await use_case(
+        tenant_id=tenant_id,
+        variant_id=variant_id,
+        channel="instagram",
+        locale="en",
+        job_id=job_id,
+        copy=_COPY,
+        forbidden_claims=[],
+    )
+
+    assert draft is not None
+    assert draft.status.value == "approved"
+
+
+async def test_stays_pending_approval_when_the_setting_is_not_the_literal_bool_false() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, variant_id, category_id = await _seed_variant(uow_factory)
+    await uow_factory.settings.add(
+        Setting.create(
+            scope_type=SettingScope.CATEGORY,
+            tenant_id=tenant_id,
+            scope_id=category_id,
+            key="approval.required",
+            value="false",  # a string, not the literal bool - must not auto-approve
+            now=_NOW,
+        )
+    )
+    job_id = await _job_id(uow_factory, tenant_id)
+
+    draft = await use_case(
+        tenant_id=tenant_id,
+        variant_id=variant_id,
+        channel="instagram",
+        locale="en",
+        job_id=job_id,
+        copy=_COPY,
+        forbidden_claims=[],
+    )
+
+    assert draft is not None
+    assert draft.status.value == "pending_approval"
+
+
 async def test_a_forbidden_claim_fails_the_job_and_writes_no_draft() -> None:
     use_case, uow_factory = _use_case()
-    tenant_id = new_tenant_id()
-    variant_id = new_product_variant_id()
+    tenant_id, variant_id, _category_id = await _seed_variant(uow_factory)
     job_id = await _job_id(uow_factory, tenant_id)
 
     draft = await use_case(
@@ -92,8 +184,7 @@ async def test_a_forbidden_claim_fails_the_job_and_writes_no_draft() -> None:
 
 async def test_regenerating_supersedes_the_existing_live_draft() -> None:
     use_case, uow_factory = _use_case()
-    tenant_id = new_tenant_id()
-    variant_id = new_product_variant_id()
+    tenant_id, variant_id, _category_id = await _seed_variant(uow_factory)
     first_job_id = await _job_id(uow_factory, tenant_id)
     first = await use_case(
         tenant_id=tenant_id,

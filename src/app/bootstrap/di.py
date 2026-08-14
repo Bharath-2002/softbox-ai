@@ -35,11 +35,14 @@ from app.api.deps.vision_analysis import get_vision_analysis
 from app.features.assets.request_download import RequestDownload
 from app.features.assets.request_upload import RequestUpload
 from app.features.assets.verify_and_register_upload import VerifyAndRegisterUpload
+from app.features.content.approve_content_draft import ApproveContentDraft
 from app.features.content.complete_content_draft_generation import (
     CompleteContentDraftGeneration,
 )
 from app.features.content.fail_content_draft_generation import FailContentDraftGeneration
 from app.features.content.generate_content_draft import GenerateContentDraft
+from app.features.content.list_content_drafts_for_variant import ListContentDraftsForVariant
+from app.features.content.reject_content_draft import RejectContentDraft
 from app.features.content.start_content_draft_generation import StartContentDraftGeneration
 from app.features.generation.approve_catalog_image import ApproveCatalogImage
 from app.features.generation.bulk_approve_catalog_images_for_product import (
@@ -566,6 +569,20 @@ def get_copywriting_agent(
     return CopywritingAgent(start, complete, fail, text_generation)
 
 
+def get_approve_content_draft(uow_factory: UowFactoryDep, clock: ClockDep) -> ApproveContentDraft:
+    return ApproveContentDraft(uow_factory, clock)
+
+
+def get_reject_content_draft(uow_factory: UowFactoryDep, clock: ClockDep) -> RejectContentDraft:
+    return RejectContentDraft(uow_factory, clock)
+
+
+def get_list_content_drafts_for_variant(
+    uow_factory: UowFactoryDep,
+) -> ListContentDraftsForVariant:
+    return ListContentDraftsForVariant(uow_factory)
+
+
 def get_reap_stuck_task_queue_jobs(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> ReapStuckTaskQueueJobs:
@@ -677,3 +694,8 @@ BulkApproveCatalogImagesForProductDep = Annotated[
 ]
 GenerateContentDraftDep = Annotated[GenerateContentDraft, Depends(get_generate_content_draft)]
 CopywritingAgentDep = Annotated[CopywritingAgent, Depends(get_copywriting_agent)]
+ApproveContentDraftDep = Annotated[ApproveContentDraft, Depends(get_approve_content_draft)]
+RejectContentDraftDep = Annotated[RejectContentDraft, Depends(get_reject_content_draft)]
+ListContentDraftsForVariantDep = Annotated[
+    ListContentDraftsForVariant, Depends(get_list_content_drafts_for_variant)
+]

@@ -1,4 +1,4 @@
-"""D23's copy-generation endpoints under ``/admin``.
+"""D23's copy-generation and approval endpoints under ``/admin``.
 
 ``POST /variants/{variant_id}/content-drafts`` enqueues generation for one
 ``(variant, channel, locale)`` — see
@@ -13,6 +13,19 @@ automatic trigger yet" shape ``POST .../generation/render-next`` and
 ``POST .../generation/qc-next`` already use. Gated on the same
 ``Capability.PRODUCT_MANAGE`` those routes use, not ``CATALOG_APPROVE`` —
 this is generation-pipeline work, not an approval action.
+
+``GET /variants/{variant_id}/content-drafts`` (live drafts for a variant),
+``POST /content-drafts/{id}/approve`` and ``POST /content-drafts/{id}/reject``
+are the approval-gate half — gated on ``Capability.CATALOG_APPROVE``, the
+**same** capability ``admin_catalog_images.py`` uses for imagery. Not a new
+``CONTENT_APPROVE`` capability: D23 says copy is subject to "the same
+approval gate as imagery," and ``catalog.approve`` already reads as
+"approve catalog content" broadly — an approver who can approve an image
+but not its caption is a distinction nothing in this codebase has asked
+for. `list_for_variant`` (not a cursor-paginated ``list_page`` — no
+multi-variant queue view exists yet, unlike the images queue) is filtered
+to live rows here, in the router, rather than adding a port method for a
+single caller.
 """
 
 from __future__ import annotations
@@ -23,13 +36,20 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
 from app.api.deps.authorization import PrincipalDep, require_capability
-from app.bootstrap.di import CopywritingAgentDep, GenerateContentDraftDep
+from app.bootstrap.di import (
+    ApproveContentDraftDep,
+    CopywritingAgentDep,
+    GenerateContentDraftDep,
+    ListContentDraftsForVariantDep,
+    RejectContentDraftDep,
+)
 from app.entities.capabilities import Capability
 from app.entities.content_draft import ContentDraft
-from app.shared.ids import ContentDraftId, ProductVariantId
+from app.shared.ids import ContentDraftId, ProductVariantId, UserId
 
 router = APIRouter()
 _manage = [Depends(require_capability(Capability.PRODUCT_MANAGE))]
+_approve = [Depends(require_capability(Capability.CATALOG_APPROVE))]
 
 
 class GenerateContentDraftRequest(BaseModel):
@@ -76,6 +96,8 @@ class ContentDraftResponse(BaseModel):
     cta: str | None
     alt_text: str
     status: str
+    approved_by: UserId | None
+    rejection_reason: str | None
     created_at: datetime
 
     @staticmethod
@@ -91,6 +113,8 @@ class ContentDraftResponse(BaseModel):
             cta=d.cta,
             alt_text=d.alt_text,
             status=d.status.value,
+            approved_by=d.approved_by,
+            rejection_reason=d.rejection_reason,
             created_at=d.created_at,
         )
 
@@ -104,3 +128,54 @@ async def generate_next_content_draft(
     assert principal.tenant_id is not None
     draft = await agent.run(tenant_id=principal.tenant_id)
     return ContentDraftResponse.from_entity(draft) if draft is not None else None
+
+
+@router.get(
+    "/variants/{variant_id}/content-drafts",
+    response_model=list[ContentDraftResponse],
+    dependencies=_approve,
+)
+async def list_content_drafts_for_variant(
+    variant_id: ProductVariantId,
+    principal: PrincipalDep,
+    use_case: ListContentDraftsForVariantDep,
+) -> list[ContentDraftResponse]:
+    assert principal.tenant_id is not None
+    drafts = await use_case(tenant_id=principal.tenant_id, variant_id=variant_id)
+    return [ContentDraftResponse.from_entity(d) for d in drafts]
+
+
+@router.post(
+    "/content-drafts/{draft_id}/approve", response_model=ContentDraftResponse, dependencies=_approve
+)
+async def approve_content_draft(
+    draft_id: ContentDraftId, principal: PrincipalDep, use_case: ApproveContentDraftDep
+) -> ContentDraftResponse:
+    assert principal.tenant_id is not None
+    draft = await use_case(
+        tenant_id=principal.tenant_id, draft_id=draft_id, approved_by=principal.user_id
+    )
+    return ContentDraftResponse.from_entity(draft)
+
+
+class RejectContentDraftRequest(BaseModel):
+    reason: str
+
+
+@router.post(
+    "/content-drafts/{draft_id}/reject", response_model=ContentDraftResponse, dependencies=_approve
+)
+async def reject_content_draft(
+    draft_id: ContentDraftId,
+    body: RejectContentDraftRequest,
+    principal: PrincipalDep,
+    use_case: RejectContentDraftDep,
+) -> ContentDraftResponse:
+    assert principal.tenant_id is not None
+    draft = await use_case(
+        tenant_id=principal.tenant_id,
+        draft_id=draft_id,
+        reason=body.reason,
+        rejected_by=principal.user_id,
+    )
+    return ContentDraftResponse.from_entity(draft)

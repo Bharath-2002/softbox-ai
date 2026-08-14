@@ -17,15 +17,31 @@ partial unique index) and
 `tests/infrastructure/test_content_draft_supersede.py` for the real-Postgres
 proof.
 
-`status` ships with a single member, `GENERATED` — deliberately not the
-full `pending_approval`/`approved`/`rejected`/... vocabulary
-`catalog_image`'s diagram-backed enum has from its first chunk. D23 gives
-no authoritative state diagram for content drafts the way D18 does for
-`catalog_image`, so naming states this chunk cannot drive would be the
-same speculative-generic mistake the `workflow_runs` deferral avoided
-earlier in this project. The copywriting agent and the approval-gate chunk
-that actually produce and drive those transitions extend both this enum
-and the migration's `CHECK` constraint when they land.
+`status` originally shipped with a single member, `GENERATED` — see
+`migrations/versions/28b3907984f5_add_content_drafts.py` for why guessing
+the rest early would have repeated the `workflow_runs` speculative-generic
+mistake. `migrations/versions/e88d14230ad4_widen_content_draft_status.py`
+widened it to the full vocabulary once the copywriting agent
+(`features.content.complete_content_draft_generation`) and the approval
+gate actually needed it: `GENERATED` (a freshly generated row, matching
+`catalog_image.PENDING_QC`'s "just produced, nothing has acted on it yet"
+role) -> `PENDING_APPROVAL` (`mark_pending_approval()`, mirroring
+`mark_qc_passed`) -> `APPROVED`/`REJECTED`. Deliberately **not** collapsed
+into `GENERATED` meaning "awaiting approval" — `catalog_image` never
+collapsed `pending_qc`/`pending_approval` either, and the same reason
+applies: a state a human is meant to act on needs its own name, so nothing
+else can land there by sharing a value that meant something different (the
+not-yet-built "manual copy editing" chunk's initial status, for one,
+should not have to mean the same thing as "an LLM just produced this").
+
+No committed row is observed at `GENERATED` today —
+`features.content.complete_content_draft_generation.CompleteContentDraftGeneration`
+calls `mark_pending_approval()` in the same transaction as `create()`, so
+`GENERATED` never survives past that use case's commit. Any future writer
+of a new draft row (the manual-copy-editing chunk, most notably) must do
+the same, or the row it creates is unapprovable forever with no error
+anywhere — exactly the dead end `human_review` catalog images are already
+known to hit.
 
 `channel`/`locale` are plain `str`, not domain enums — see the migration's
 docstring for why (closer to tenant/deployment configuration than fixed
@@ -53,6 +69,9 @@ from app.shared.ids import ContentDraftId, ProductVariantId, TenantId, UserId, n
 
 class ContentDraftStatus(StrEnum):
     GENERATED = "generated"
+    PENDING_APPROVAL = "pending_approval"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 @dataclass
@@ -71,6 +90,9 @@ class ContentDraft:
     prompt_version: str
     status: ContentDraftStatus
     edited_by: UserId | None
+    approved_by: UserId | None
+    approved_at: datetime | None
+    rejection_reason: str | None
     superseded_by: ContentDraftId | None
     created_at: datetime
     updated_at: datetime
@@ -106,6 +128,9 @@ class ContentDraft:
             prompt_version=prompt_version,
             status=ContentDraftStatus.GENERATED,
             edited_by=None,
+            approved_by=None,
+            approved_at=None,
+            rejection_reason=None,
             superseded_by=None,
             created_at=now,
             updated_at=now,
@@ -115,4 +140,36 @@ class ContentDraft:
         if self.superseded_by is not None:
             raise ValidationError(f"Content draft {self.id} is already superseded.")
         self.superseded_by = by
+        self.updated_at = now
+
+    def mark_pending_approval(self, *, now: datetime) -> None:
+        """`generated -> pending_approval`, mirroring `catalog_image.mark_qc_passed`'s
+        role: records that this row is ready for a human (or the
+        `approval.required`-disabled auto-approve path) to act on."""
+        if self.status != ContentDraftStatus.GENERATED:
+            raise ValidationError(
+                f"Cannot move to pending_approval from status {self.status.value!r}."
+            )
+        self.status = ContentDraftStatus.PENDING_APPROVAL
+        self.updated_at = now
+
+    def approve(self, *, approved_by: UserId | None, now: datetime) -> None:
+        """`pending_approval -> approved`. `approved_by` is `None` only for
+        the auto-approve path (`approval.required` resolved `False`) — a
+        human-driven approval always passes a real `UserId`, the same
+        `CatalogImage.approve` convention."""
+        if self.status != ContentDraftStatus.PENDING_APPROVAL:
+            raise ValidationError(f"Cannot approve from status {self.status.value!r}.")
+        self.status = ContentDraftStatus.APPROVED
+        self.approved_by = approved_by
+        self.approved_at = now
+        self.updated_at = now
+
+    def reject(self, *, reason: str, now: datetime) -> None:
+        """`pending_approval -> rejected`. Human-only, matching
+        `CatalogImage.reject` — nothing in this codebase auto-rejects."""
+        if self.status != ContentDraftStatus.PENDING_APPROVAL:
+            raise ValidationError(f"Cannot reject from status {self.status.value!r}.")
+        self.status = ContentDraftStatus.REJECTED
+        self.rejection_reason = reason
         self.updated_at = now

@@ -19,6 +19,7 @@ from app.bootstrap.di import get_clock, get_uow_factory
 from app.bootstrap.settings import Settings
 from app.entities.catalog_image import CatalogImage
 from app.entities.category import Category
+from app.entities.content_draft import ContentDraft
 from app.entities.product import Product
 from app.entities.product_variant import ProductVariant
 from app.features.content.start_content_draft_generation import JOB_TYPE
@@ -158,7 +159,7 @@ async def test_generate_next_over_http_claims_and_returns_the_draft() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body is not None
-    assert body["status"] == "generated"
+    assert body["status"] == "pending_approval"
     assert body["variant_id"] == str(variant.id)
 
 
@@ -184,6 +185,102 @@ async def test_generate_requires_the_product_manage_capability() -> None:
             f"/api/v1/admin/variants/{uuid.uuid4()}/content-drafts",
             json={"channel": "instagram", "locale": "en"},
             headers=headers,
+        )
+
+    assert response.status_code == 403
+
+
+async def _seed_pending_approval_draft(
+    uow_factory: FakeUnitOfWorkFactory, tenant_id: TenantId
+) -> tuple[ContentDraft, ProductVariant]:
+    variant = await _seed_variant_with_approved_image(uow_factory, tenant_id)
+    draft = ContentDraft.create(
+        tenant_id,
+        variant.id,
+        channel="instagram",
+        locale="en",
+        body="Crafted with care.",
+        alt_text="A folded saree.",
+        model="fake-text-model",
+        prompt_version="v1",
+        now=_NOW,
+    )
+    draft.mark_pending_approval(now=_NOW)
+    await uow_factory.content_drafts.add(draft)
+    return draft, variant
+
+
+async def test_list_content_drafts_over_http_returns_the_live_draft() -> None:
+    app, uow_factory, _clock, codec, _text_generation = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    draft, variant = await _seed_pending_approval_draft(uow_factory, tenant_id)
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["catalog.approve"]
+    )
+
+    async with await _client(app) as http:
+        response = await http.get(
+            f"/api/v1/admin/variants/{variant.id}/content-drafts", headers=headers
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [d["id"] for d in body] == [str(draft.id)]
+
+
+async def test_approve_content_draft_over_http_marks_it_approved() -> None:
+    app, uow_factory, _clock, codec, _text_generation = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    draft, _variant = await _seed_pending_approval_draft(uow_factory, tenant_id)
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["catalog.approve"]
+    )
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/content-drafts/{draft.id}/approve", headers=headers
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
+    stored = await uow_factory.content_drafts.get(tenant_id, draft.id)
+    assert stored is not None
+    assert stored.status.value == "approved"
+
+
+async def test_reject_content_draft_over_http_records_the_reason() -> None:
+    app, uow_factory, _clock, codec, _text_generation = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    draft, _variant = await _seed_pending_approval_draft(uow_factory, tenant_id)
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["catalog.approve"]
+    )
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/content-drafts/{draft.id}/reject",
+            json={"reason": "wrong tone"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
+    assert response.json()["rejection_reason"] == "wrong tone"
+
+
+async def test_approve_content_draft_requires_the_catalog_approve_capability() -> None:
+    app, uow_factory, _clock, codec, _text_generation = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    draft, _variant = await _seed_pending_approval_draft(uow_factory, tenant_id)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/content-drafts/{draft.id}/approve", headers=headers
         )
 
     assert response.status_code == 403
