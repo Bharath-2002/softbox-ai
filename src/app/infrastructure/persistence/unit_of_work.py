@@ -25,6 +25,7 @@ from types import TracebackType
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.infrastructure.persistence.asset_repository import SqlAssetRepository
 from app.infrastructure.persistence.attribute_definition_repository import (
     SqlAttributeDefinitionRepository,
 )
@@ -56,6 +57,7 @@ from app.infrastructure.persistence.variant_axis_repository import SqlVariantAxi
 from app.infrastructure.persistence.variant_axis_value_repository import (
     SqlVariantAxisValueRepository,
 )
+from app.services.ports.asset_repository import AssetRepository
 from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
 from app.services.ports.catalog_image_slot_repository import CatalogImageSlotRepository
@@ -113,6 +115,7 @@ class SqlUnitOfWork:
         )
         self._category_spec_versions: SqlCategorySpecVersionRepository | None = None
         self._settings: SqlSettingsRepository | None = None
+        self._assets: SqlAssetRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -220,6 +223,12 @@ class SqlUnitOfWork:
             self._settings = SqlSettingsRepository(self.session)
         return self._settings
 
+    @property
+    def assets(self) -> AssetRepository:
+        if self._assets is None:
+            self._assets = SqlAssetRepository(self.session)
+        return self._assets
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -263,6 +272,7 @@ class SqlUnitOfWork:
             self._catalog_slot_input_requirements = None
             self._category_spec_versions = None
             self._settings = None
+            self._assets = None
 
 
 def make_unit_of_work_factory(

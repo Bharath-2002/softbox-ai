@@ -48,6 +48,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import registry
 
+from app.entities.asset import Asset, AssetKind
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
 from app.entities.catalog_slot_input_requirement import CatalogSlotInputRequirement
 from app.entities.category import Category
@@ -96,6 +97,14 @@ _spec_version_status_type = Enum(
 _setting_scope_type = Enum(
     SettingScope,
     name="setting_scope_type",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_asset_kind_type = Enum(
+    AssetKind,
+    name="asset_kind",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -322,6 +331,25 @@ settings_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+assets_table = Table(
+    "assets",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("storage_key", Text(), nullable=False),
+    Column("sha256", Text(), nullable=False),
+    Column("mime", Text(), nullable=False),
+    Column("width", Integer(), nullable=False),
+    Column("height", Integer(), nullable=False),
+    Column("bytes", Integer(), nullable=False),
+    Column("kind", _asset_kind_type, nullable=False),
+    Column("source", Text(), nullable=False),
+    Column("parent_asset_id", Uuid(), nullable=True),
+    Column("meta", JSONB(), nullable=False),
+    Column("uploaded_by", Uuid(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -384,4 +412,5 @@ def start_mappers() -> None:
     )
     mapper_registry.map_imperatively(CategorySpecVersion, category_spec_versions_table)
     mapper_registry.map_imperatively(Setting, settings_table)
+    mapper_registry.map_imperatively(Asset, assets_table)
     _mapped = True

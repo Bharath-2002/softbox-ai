@@ -35,6 +35,7 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Protocol
 
+from app.services.ports.asset_repository import AssetRepository
 from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
 from app.services.ports.catalog_image_slot_repository import CatalogImageSlotRepository
@@ -104,6 +105,9 @@ class UnitOfWork(Protocol):
 
     @property
     def settings(self) -> SettingsRepository: ...
+
+    @property
+    def assets(self) -> AssetRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

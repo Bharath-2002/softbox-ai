@@ -14,6 +14,7 @@ from collections.abc import Callable
 from types import TracebackType
 
 from app.shared.ids import TenantId
+from tests.fakes.asset_repository import InMemoryAssetRepository
 from tests.fakes.attribute_definition_repository import InMemoryAttributeDefinitionRepository
 from tests.fakes.audit_log_repository import InMemoryAuditLogRepository
 from tests.fakes.catalog_image_slot_repository import InMemoryCatalogImageSlotRepository
@@ -54,6 +55,7 @@ class FakeUnitOfWork:
         catalog_slot_input_requirements: InMemoryCatalogSlotInputRequirementRepository,
         category_spec_versions: InMemoryCategorySpecVersionRepository,
         settings: InMemorySettingsRepository,
+        assets: InMemoryAssetRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -73,6 +75,7 @@ class FakeUnitOfWork:
         self.catalog_slot_input_requirements = catalog_slot_input_requirements
         self.category_spec_versions = category_spec_versions
         self.settings = settings
+        self.assets = assets
         self.committed = False
         self.rolled_back = False
 
@@ -114,6 +117,7 @@ class FakeUnitOfWorkFactory:
         self.catalog_slot_input_requirements = InMemoryCatalogSlotInputRequirementRepository()
         self.category_spec_versions = InMemoryCategorySpecVersionRepository()
         self.settings = InMemorySettingsRepository()
+        self.assets = InMemoryAssetRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -133,6 +137,7 @@ class FakeUnitOfWorkFactory:
             catalog_slot_input_requirements=self.catalog_slot_input_requirements,
             category_spec_versions=self.category_spec_versions,
             settings=self.settings,
+            assets=self.assets,
             tenant_id=tenant_id,
         )
 
