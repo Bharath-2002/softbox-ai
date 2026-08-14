@@ -14,6 +14,9 @@ class InMemoryGenerationItemRepository:
     async def add(self, item: GenerationItem) -> None:
         self._rows[(item.tenant_id, item.id)] = item
 
+    async def update(self, item: GenerationItem) -> None:
+        self._rows[(item.tenant_id, item.id)] = item
+
     async def list_for_request(
         self, tenant_id: TenantId, request_id: GenerationRequestId
     ) -> list[GenerationItem]:

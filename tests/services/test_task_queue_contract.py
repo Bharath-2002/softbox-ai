@@ -137,8 +137,9 @@ async def test_fail_below_max_attempts_reschedules_as_pending(ctx: Context) -> N
     )
     await ctx.jobs.claim(ctx.tenant_id, claimed_by="worker-1", now=now)
 
-    await ctx.jobs.fail(ctx.tenant_id, job_id, error="boom", now=now)
+    result = await ctx.jobs.fail(ctx.tenant_id, job_id, error="boom", now=now)
 
+    assert result == "pending"
     job = await ctx.jobs.get(ctx.tenant_id, job_id)
     assert job is not None
     assert job.status == "pending"
@@ -154,13 +155,45 @@ async def test_fail_at_max_attempts_transitions_to_dead(ctx: Context) -> None:
     )
     await ctx.jobs.claim(ctx.tenant_id, claimed_by="worker-1", now=now)
 
-    await ctx.jobs.fail(ctx.tenant_id, job_id, error="boom", now=now)
+    result = await ctx.jobs.fail(ctx.tenant_id, job_id, error="boom", now=now)
 
+    assert result == "dead"
     job = await ctx.jobs.get(ctx.tenant_id, job_id)
     assert job is not None
     assert job.status == "dead"
     assert job.attempts == 1
     assert job.last_error == "boom"
+
+
+async def test_fail_on_an_unknown_job_raises(ctx: Context) -> None:
+    with pytest.raises(ValueError):
+        await ctx.jobs.fail(ctx.tenant_id, uuid.uuid4(), error="boom", now=utcnow())
+
+
+async def test_claim_with_job_type_ignores_a_due_job_of_a_different_type(ctx: Context) -> None:
+    now = utcnow()
+    await ctx.jobs.enqueue(ctx.tenant_id, job_type="other.type", payload={}, run_at=now, now=now)
+
+    claimed = await ctx.jobs.claim(
+        ctx.tenant_id, claimed_by="worker-1", job_type="generation.step", now=now
+    )
+
+    assert claimed is None
+
+
+async def test_claim_with_job_type_returns_a_matching_due_job(ctx: Context) -> None:
+    now = utcnow()
+    await ctx.jobs.enqueue(ctx.tenant_id, job_type="other.type", payload={}, run_at=now, now=now)
+    job_id = await ctx.jobs.enqueue(
+        ctx.tenant_id, job_type="generation.step", payload={}, run_at=now, now=now
+    )
+
+    claimed = await ctx.jobs.claim(
+        ctx.tenant_id, claimed_by="worker-1", job_type="generation.step", now=now
+    )
+
+    assert claimed is not None
+    assert claimed.id == job_id
 
 
 async def test_get_on_an_unknown_job_returns_none(ctx: Context) -> None:

@@ -20,15 +20,20 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from app.agents.generation_render import GenerationRenderAgent
 from app.agents.input_image_validation import InputImageValidationAgent
 from app.agents.template_analysis import TemplateAnalysisAgent
 from app.api.deps.authorization import get_token_issuer
 from app.api.deps.content_moderation import get_content_moderation_scanner
+from app.api.deps.image_generation import get_image_generation
 from app.api.deps.object_storage import get_object_storage
 from app.api.deps.vision_analysis import get_vision_analysis
 from app.features.assets.request_download import RequestDownload
 from app.features.assets.request_upload import RequestUpload
 from app.features.assets.verify_and_register_upload import VerifyAndRegisterUpload
+from app.features.generation.complete_generation_item_render import CompleteGenerationItemRender
+from app.features.generation.fail_generation_item_render import FailGenerationItemRender
+from app.features.generation.start_generation_item_render import StartGenerationItemRender
 from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
@@ -84,6 +89,7 @@ from app.features.templates.seed_stock_presets import SeedStockPresets
 from app.features.templates.start_template_analysis import StartTemplateAnalysis
 from app.services.ports.content_moderation import ContentModerationScanner
 from app.services.ports.identity_provider import IdentityProvider
+from app.services.ports.image_generation import ImageGeneration
 from app.services.ports.object_storage import ObjectStorage
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
@@ -425,6 +431,36 @@ def get_template_analysis_agent(
     return TemplateAnalysisAgent(start, complete, fail, object_storage, vision_analysis)
 
 
+def get_start_generation_item_render(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> StartGenerationItemRender:
+    return StartGenerationItemRender(uow_factory, clock)
+
+
+def get_complete_generation_item_render(
+    uow_factory: UowFactoryDep,
+    clock: ClockDep,
+    object_storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+) -> CompleteGenerationItemRender:
+    return CompleteGenerationItemRender(uow_factory, object_storage, clock)
+
+
+def get_fail_generation_item_render(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> FailGenerationItemRender:
+    return FailGenerationItemRender(uow_factory, clock)
+
+
+def get_generation_render_agent(
+    start: Annotated[StartGenerationItemRender, Depends(get_start_generation_item_render)],
+    complete: Annotated[CompleteGenerationItemRender, Depends(get_complete_generation_item_render)],
+    fail: Annotated[FailGenerationItemRender, Depends(get_fail_generation_item_render)],
+    object_storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+    image_generation: Annotated[ImageGeneration, Depends(get_image_generation)],
+) -> GenerationRenderAgent:
+    return GenerationRenderAgent(start, complete, fail, object_storage, image_generation)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -506,3 +542,4 @@ InputImageValidationAgentDep = Annotated[
     InputImageValidationAgent, Depends(get_input_image_validation_agent)
 ]
 TemplateAnalysisAgentDep = Annotated[TemplateAnalysisAgent, Depends(get_template_analysis_agent)]
+GenerationRenderAgentDep = Annotated[GenerationRenderAgent, Depends(get_generation_render_agent)]

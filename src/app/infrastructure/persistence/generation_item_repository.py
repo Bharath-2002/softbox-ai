@@ -27,6 +27,9 @@ class SqlGenerationItemRepository:
         self._session.add(item)
         await self._session.flush()
 
+    async def update(self, item: GenerationItem) -> None:
+        await self._session.flush()
+
     async def list_for_request(
         self, tenant_id: TenantId, request_id: GenerationRequestId
     ) -> list[GenerationItem]:

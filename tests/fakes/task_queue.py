@@ -45,12 +45,20 @@ class InMemoryTaskQueue:
         return job_id
 
     async def claim(
-        self, tenant_id: TenantId, *, claimed_by: str, now: datetime
+        self,
+        tenant_id: TenantId,
+        *,
+        claimed_by: str,
+        job_type: str | None = None,
+        now: datetime,
     ) -> TaskQueueJob | None:
         candidates = [
             row
             for row in self._rows.values()
-            if row.tenant_id == tenant_id and row.status == "pending" and row.run_at <= now
+            if row.tenant_id == tenant_id
+            and row.status == "pending"
+            and row.run_at <= now
+            and (job_type is None or row.job_type == job_type)
         ]
         if not candidates:
             return None
@@ -70,23 +78,25 @@ class InMemoryTaskQueue:
         if row is not None:
             self._rows[job_id] = replace(row, status="succeeded", updated_at=now)
 
-    async def fail(self, tenant_id: TenantId, job_id: UUID, *, error: str, now: datetime) -> None:
+    async def fail(self, tenant_id: TenantId, job_id: UUID, *, error: str, now: datetime) -> str:
         row = await self.get(tenant_id, job_id)
         if row is None:
-            return
+            raise ValueError(f"Task queue job {job_id} not found for tenant {tenant_id}.")
 
         new_attempts = row.attempts + 1
         if new_attempts >= row.max_attempts:
             self._rows[job_id] = replace(
                 row, status="dead", attempts=new_attempts, last_error=error, updated_at=now
             )
-        else:
-            delay = compute_backoff(new_attempts, jitter=random.random())
-            self._rows[job_id] = replace(
-                row,
-                status="pending",
-                attempts=new_attempts,
-                last_error=error,
-                run_at=now + delay,
-                updated_at=now,
-            )
+            return "dead"
+
+        delay = compute_backoff(new_attempts, jitter=random.random())
+        self._rows[job_id] = replace(
+            row,
+            status="pending",
+            attempts=new_attempts,
+            last_error=error,
+            run_at=now + delay,
+            updated_at=now,
+        )
+        return "pending"

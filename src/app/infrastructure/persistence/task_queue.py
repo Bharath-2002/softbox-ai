@@ -74,7 +74,12 @@ class SqlTaskQueue:
         return job_id
 
     async def claim(
-        self, tenant_id: TenantId, *, claimed_by: str, now: datetime
+        self,
+        tenant_id: TenantId,
+        *,
+        claimed_by: str,
+        job_type: str | None = None,
+        now: datetime,
     ) -> TaskQueueJob | None:
         candidate = (
             select(task_queue_jobs_table.c.id)
@@ -87,6 +92,8 @@ class SqlTaskQueue:
             .limit(1)
             .with_for_update(skip_locked=True)
         )
+        if job_type is not None:
+            candidate = candidate.where(task_queue_jobs_table.c.job_type == job_type)
         stmt = (
             update(task_queue_jobs_table)
             .where(task_queue_jobs_table.c.id == candidate.scalar_subquery())
@@ -117,14 +124,19 @@ class SqlTaskQueue:
         await self._session.execute(stmt)
         await self._session.flush()
 
-    async def fail(self, tenant_id: TenantId, job_id: UUID, *, error: str, now: datetime) -> None:
+    async def fail(self, tenant_id: TenantId, job_id: UUID, *, error: str, now: datetime) -> str:
         job = await self.get(tenant_id, job_id)
         if job is None:
-            return
+            raise ValueError(f"Task queue job {job_id} not found for tenant {tenant_id}.")
 
         new_attempts = job.attempts + 1
-        if new_attempts >= job.max_attempts:
-            values = {"status": "dead", "attempts": new_attempts, "last_error": error}
+        new_status = "dead" if new_attempts >= job.max_attempts else "pending"
+        if new_status == "dead":
+            values: dict[str, Any] = {
+                "status": "dead",
+                "attempts": new_attempts,
+                "last_error": error,
+            }
         else:
             delay = compute_backoff(new_attempts, jitter=random.random())
             values = {
@@ -144,3 +156,4 @@ class SqlTaskQueue:
         )
         await self._session.execute(stmt)
         await self._session.flush()
+        return new_status

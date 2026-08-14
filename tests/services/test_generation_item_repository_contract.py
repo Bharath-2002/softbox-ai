@@ -7,6 +7,7 @@ slot and a catalog template.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -91,6 +92,13 @@ _INSERT_CATALOG_IMAGE_SLOT = text(
     "(id, tenant_id, category_id, key, label, position, aspect_ratio, target_width, "
     "target_height, is_required, created_at, updated_at) "
     "VALUES (:id, :tenant_id, :category_id, :key, :key, 0, '4:5', 1080, 1350, true, now(), now())"
+)
+_INSERT_ASSET = text(
+    "INSERT INTO assets "
+    "(id, tenant_id, storage_key, sha256, mime, width, height, bytes, kind, source, "
+    "parent_asset_id, meta, uploaded_by, created_at) "
+    "VALUES (:id, :tenant_id, :storage_key, :sha256, 'image/jpeg', 100, 100, 1000, 'generated', "
+    "'generation', NULL, '{}'::jsonb, NULL, now())"
 )
 _INSERT_CATALOG_TEMPLATE = text(
     "INSERT INTO catalog_templates "
@@ -182,6 +190,15 @@ async def _make_real_fixture() -> tuple[
             "variant_id": str(variant_id),
             "spec_version_id": str(spec_version_id),
             "requested_by": str(user_id),
+        },
+    )
+    await session.execute(
+        _INSERT_ASSET,
+        {
+            "id": str(input_asset_id),
+            "tenant_id": str(tenant_id),
+            "storage_key": f"tenants/{tenant_id}/generated/{input_asset_id}.jpg",
+            "sha256": hashlib.sha256(str(input_asset_id).encode()).hexdigest(),
         },
     )
     await session.execute(
@@ -277,6 +294,22 @@ async def test_add_then_get_round_trips(ctx: Context) -> None:
     assert fetched.input_asset_ids == [ctx.input_asset_id]
     assert fetched.output_asset_id is None
     assert fetched.cost_micros is None
+
+
+async def test_update_persists_a_status_transition(ctx: Context) -> None:
+    item = _item(ctx)
+    await ctx.items.add(item)
+
+    item.mark_running()
+    item.mark_succeeded(output_asset_id=ctx.input_asset_id, cost_micros=1_000, latency_ms=250)
+    await ctx.items.update(item)
+
+    fetched = await ctx.items.get(ctx.tenant_id, item.id)
+    assert fetched is not None
+    assert fetched.status.value == "succeeded"
+    assert fetched.output_asset_id == ctx.input_asset_id
+    assert fetched.cost_micros == 1_000
+    assert fetched.latency_ms == 250
 
 
 async def test_list_for_request_returns_every_attempt(ctx: Context) -> None:
