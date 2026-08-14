@@ -112,6 +112,7 @@ class ContentDraft:
         title: str | None = None,
         hashtags: list[str] | None = None,
         cta: str | None = None,
+        edited_by: UserId | None = None,
     ) -> ContentDraft:
         return ContentDraft(
             id=new_content_draft_id(),
@@ -127,7 +128,7 @@ class ContentDraft:
             model=model,
             prompt_version=prompt_version,
             status=ContentDraftStatus.GENERATED,
-            edited_by=None,
+            edited_by=edited_by,
             approved_by=None,
             approved_at=None,
             rejection_reason=None,

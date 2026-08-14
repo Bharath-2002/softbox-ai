@@ -22,6 +22,7 @@ from app.entities.category import Category
 from app.entities.content_draft import ContentDraft
 from app.entities.product import Product
 from app.entities.product_variant import ProductVariant
+from app.entities.setting import Setting, SettingScope
 from app.features.content.start_content_draft_generation import JOB_TYPE
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.services.ports.token_issuer import AccessTokenClaims
@@ -284,3 +285,80 @@ async def test_approve_content_draft_requires_the_catalog_approve_capability() -
         )
 
     assert response.status_code == 403
+
+
+async def test_edit_content_draft_over_http_supersedes_and_returns_the_replacement() -> None:
+    app, uow_factory, _clock, codec, _text_generation = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    draft, _variant = await _seed_pending_approval_draft(uow_factory, tenant_id)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.patch(
+            f"/api/v1/admin/content-drafts/{draft.id}",
+            json={"body": "Hand-edited copy.", "hashtags": [], "alt_text": "A folded saree."},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] != str(draft.id)
+    assert body["body"] == "Hand-edited copy."
+    assert body["status"] == "pending_approval"
+    stored_original = await uow_factory.content_drafts.get(tenant_id, draft.id)
+    assert stored_original is not None
+    assert stored_original.superseded_by is not None
+
+
+async def test_edit_content_draft_requires_the_product_manage_capability() -> None:
+    app, uow_factory, _clock, codec, _text_generation = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    draft, _variant = await _seed_pending_approval_draft(uow_factory, tenant_id)
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["catalog.approve"]
+    )
+
+    async with await _client(app) as http:
+        response = await http.patch(
+            f"/api/v1/admin/content-drafts/{draft.id}",
+            json={"body": "Hand-edited copy.", "hashtags": [], "alt_text": "A folded saree."},
+            headers=headers,
+        )
+
+    assert response.status_code == 403
+
+
+async def test_edit_content_draft_over_http_rejects_a_forbidden_claim() -> None:
+    app, uow_factory, _clock, codec, _text_generation = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    draft, _variant = await _seed_pending_approval_draft(uow_factory, tenant_id)
+    await uow_factory.settings.add(
+        Setting.create(
+            scope_type=SettingScope.TENANT,
+            tenant_id=tenant_id,
+            scope_id=None,
+            key="content.forbidden_claims",
+            value=["cures arthritis"],
+            now=_NOW,
+        )
+    )
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.patch(
+            f"/api/v1/admin/content-drafts/{draft.id}",
+            json={
+                "body": "This saree cures arthritis.",
+                "hashtags": [],
+                "alt_text": "A folded saree.",
+            },
+            headers=headers,
+        )
+
+    assert response.status_code == 422
+    stored = await uow_factory.content_drafts.get(tenant_id, draft.id)
+    assert stored is not None
+    assert stored.superseded_by is None

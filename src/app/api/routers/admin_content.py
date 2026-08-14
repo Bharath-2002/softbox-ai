@@ -26,6 +26,14 @@ for. `list_for_variant`` (not a cursor-paginated ``list_page`` — no
 multi-variant queue view exists yet, unlike the images queue) is filtered
 to live rows here, in the router, rather than adding a port method for a
 single caller.
+
+``PATCH /content-drafts/{id}`` is manual copy editing — gated on
+``Capability.PRODUCT_MANAGE``, matching the generation route above, not
+``CATALOG_APPROVE``: writing copy is content authoring, the same
+capability that triggers generation, regardless of who later approves it.
+See `features.content.edit_content_draft`'s docstring for why an edit
+re-runs both the forbidden-claims check and the approval gate rather than
+trusting the editor.
 """
 
 from __future__ import annotations
@@ -39,6 +47,7 @@ from app.api.deps.authorization import PrincipalDep, require_capability
 from app.bootstrap.di import (
     ApproveContentDraftDep,
     CopywritingAgentDep,
+    EditContentDraftDep,
     GenerateContentDraftDep,
     ListContentDraftsForVariantDep,
     RejectContentDraftDep,
@@ -96,6 +105,7 @@ class ContentDraftResponse(BaseModel):
     cta: str | None
     alt_text: str
     status: str
+    edited_by: UserId | None
     approved_by: UserId | None
     rejection_reason: str | None
     created_at: datetime
@@ -113,6 +123,7 @@ class ContentDraftResponse(BaseModel):
             cta=d.cta,
             alt_text=d.alt_text,
             status=d.status.value,
+            edited_by=d.edited_by,
             approved_by=d.approved_by,
             rejection_reason=d.rejection_reason,
             created_at=d.created_at,
@@ -177,5 +188,36 @@ async def reject_content_draft(
         draft_id=draft_id,
         reason=body.reason,
         rejected_by=principal.user_id,
+    )
+    return ContentDraftResponse.from_entity(draft)
+
+
+class EditContentDraftRequest(BaseModel):
+    title: str | None = None
+    body: str
+    hashtags: list[str] = []
+    cta: str | None = None
+    alt_text: str
+
+
+@router.patch(
+    "/content-drafts/{draft_id}", response_model=ContentDraftResponse, dependencies=_manage
+)
+async def edit_content_draft(
+    draft_id: ContentDraftId,
+    body: EditContentDraftRequest,
+    principal: PrincipalDep,
+    use_case: EditContentDraftDep,
+) -> ContentDraftResponse:
+    assert principal.tenant_id is not None
+    draft = await use_case(
+        tenant_id=principal.tenant_id,
+        draft_id=draft_id,
+        edited_by=principal.user_id,
+        title=body.title,
+        body=body.body,
+        hashtags=body.hashtags,
+        cta=body.cta,
+        alt_text=body.alt_text,
     )
     return ContentDraftResponse.from_entity(draft)

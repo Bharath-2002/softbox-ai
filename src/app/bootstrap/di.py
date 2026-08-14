@@ -39,6 +39,7 @@ from app.features.content.approve_content_draft import ApproveContentDraft
 from app.features.content.complete_content_draft_generation import (
     CompleteContentDraftGeneration,
 )
+from app.features.content.edit_content_draft import EditContentDraft
 from app.features.content.fail_content_draft_generation import FailContentDraftGeneration
 from app.features.content.generate_content_draft import GenerateContentDraft
 from app.features.content.list_content_drafts_for_variant import ListContentDraftsForVariant
@@ -583,6 +584,10 @@ def get_list_content_drafts_for_variant(
     return ListContentDraftsForVariant(uow_factory)
 
 
+def get_edit_content_draft(uow_factory: UowFactoryDep, clock: ClockDep) -> EditContentDraft:
+    return EditContentDraft(uow_factory, clock)
+
+
 def get_reap_stuck_task_queue_jobs(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> ReapStuckTaskQueueJobs:
@@ -699,3 +704,4 @@ RejectContentDraftDep = Annotated[RejectContentDraft, Depends(get_reject_content
 ListContentDraftsForVariantDep = Annotated[
     ListContentDraftsForVariant, Depends(get_list_content_drafts_for_variant)
 ]
+EditContentDraftDep = Annotated[EditContentDraft, Depends(get_edit_content_draft)]

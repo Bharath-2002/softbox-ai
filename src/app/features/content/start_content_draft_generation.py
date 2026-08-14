@@ -62,7 +62,7 @@ class ContentDraftGenerationContext:
     forbidden_claims: list[str]
 
 
-def _resolve_forbidden_claims(value: object) -> list[str]:
+def resolve_forbidden_claims(value: object) -> list[str]:
     if value is None:
         return []
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
@@ -111,7 +111,7 @@ class StartContentDraftGeneration:
                 product_id=product.id,
             )
             try:
-                forbidden_claims = _resolve_forbidden_claims(raw_forbidden_claims)
+                forbidden_claims = resolve_forbidden_claims(raw_forbidden_claims)
             except ValidationError as exc:
                 # Tenant configuration, not a data inconsistency - identical
                 # on every retry, so it must not be left for the reaper (see
