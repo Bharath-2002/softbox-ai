@@ -57,6 +57,7 @@ from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
 from app.services.ports.task_queue import TaskQueue
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
+from app.services.ports.tenant_repository import TenantRepository
 from app.services.ports.user_repository import UserRepository
 from app.services.ports.variant_axis_repository import VariantAxisRepository
 from app.services.ports.variant_axis_value_repository import VariantAxisValueRepository
@@ -132,6 +133,9 @@ class UnitOfWork(Protocol):
 
     @property
     def task_queue(self) -> TaskQueue: ...
+
+    @property
+    def tenants(self) -> TenantRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

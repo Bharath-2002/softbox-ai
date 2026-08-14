@@ -150,6 +150,23 @@ _input_image_status_type = Enum(
 mapper_registry = registry()
 metadata = mapper_registry.metadata
 
+# No entity class - a platform-plane row, not a rich domain object (D4);
+# ``tenants`` carries no RLS (see the bootstrap migration's docstring), so
+# reading across every tenant is a legitimate query here, unlike every
+# tenant-scoped table below. Queried via Core directly by
+# ``SqlTenantRepository``.
+tenants_table = Table(
+    "tenants",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("name", Text(), nullable=False),
+    Column("slug", Text(), nullable=False, unique=True),
+    Column("status", Text(), nullable=False),
+    Column("plan", Text(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 users_table = Table(
     "users",
     metadata,
