@@ -10,6 +10,14 @@ narrow +/-10% jitter does not.
 calling ``random.random()`` itself, so the function stays pure and its own
 test is deterministic — the one call site that needs real randomness
 (``TaskQueue.fail``) supplies it.
+
+``STUCK_JOB_THRESHOLD`` lives here rather than next to ``TaskQueue.reap_stuck``
+because it is the same kind of timing policy as the backoff constants, not a
+query concern. ARCHITECTURE.md documents this queue's jobs as "dominated by
+30-second external image calls" — 10 minutes is a wide margin above any
+legitimate single provider call (including read-reference-images plus the
+call itself), so a job still ``running`` past it means the worker that
+claimed it crashed or was killed, not that it is slow.
 """
 
 from __future__ import annotations
@@ -18,6 +26,8 @@ from datetime import timedelta
 
 _BASE_SECONDS = 2.0
 _CAP_SECONDS = 300.0
+
+STUCK_JOB_THRESHOLD = timedelta(minutes=10)
 
 
 def compute_backoff(attempt: int, *, jitter: float) -> timedelta:

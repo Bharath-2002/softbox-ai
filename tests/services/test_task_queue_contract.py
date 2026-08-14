@@ -198,3 +198,80 @@ async def test_claim_with_job_type_returns_a_matching_due_job(ctx: Context) -> N
 
 async def test_get_on_an_unknown_job_returns_none(ctx: Context) -> None:
     assert await ctx.jobs.get(ctx.tenant_id, uuid.uuid4()) is None
+
+
+async def test_reap_stuck_requeues_a_job_claimed_before_the_threshold(ctx: Context) -> None:
+    now = utcnow()
+    job_id = await ctx.jobs.enqueue(ctx.tenant_id, job_type="a", payload={}, run_at=now, now=now)
+    await ctx.jobs.claim(ctx.tenant_id, claimed_by="worker-1", now=now)
+
+    reaped_at = now + timedelta(minutes=15)
+    count = await ctx.jobs.reap_stuck(
+        ctx.tenant_id, claimed_before=now + timedelta(minutes=10), now=reaped_at
+    )
+
+    assert count == 1
+    job = await ctx.jobs.get(ctx.tenant_id, job_id)
+    assert job is not None
+    assert job.status == "pending"
+    assert job.attempts == 1
+    assert job.last_error is not None
+    assert job.run_at >= reaped_at
+
+
+async def test_reap_stuck_ignores_a_job_claimed_after_the_threshold(ctx: Context) -> None:
+    now = utcnow()
+    job_id = await ctx.jobs.enqueue(ctx.tenant_id, job_type="a", payload={}, run_at=now, now=now)
+    await ctx.jobs.claim(ctx.tenant_id, claimed_by="worker-1", now=now)
+
+    count = await ctx.jobs.reap_stuck(
+        ctx.tenant_id, claimed_before=now - timedelta(minutes=10), now=now
+    )
+
+    assert count == 0
+    job = await ctx.jobs.get(ctx.tenant_id, job_id)
+    assert job is not None
+    assert job.status == "running"
+
+
+async def test_reap_stuck_ignores_pending_and_succeeded_jobs(ctx: Context) -> None:
+    now = utcnow()
+    succeeded_id = await ctx.jobs.enqueue(
+        ctx.tenant_id, job_type="a", payload={}, run_at=now, now=now
+    )
+    pending_id = await ctx.jobs.enqueue(
+        ctx.tenant_id, job_type="a", payload={}, run_at=now + timedelta(minutes=1), now=now
+    )
+    claimed = await ctx.jobs.claim(ctx.tenant_id, claimed_by="worker-1", now=now)
+    assert claimed is not None
+    assert claimed.id == succeeded_id
+    await ctx.jobs.complete(ctx.tenant_id, succeeded_id, now=now)
+
+    count = await ctx.jobs.reap_stuck(
+        ctx.tenant_id, claimed_before=now + timedelta(hours=1), now=now
+    )
+
+    assert count == 0
+    pending = await ctx.jobs.get(ctx.tenant_id, pending_id)
+    assert pending is not None
+    assert pending.status == "pending"
+    succeeded = await ctx.jobs.get(ctx.tenant_id, succeeded_id)
+    assert succeeded is not None
+    assert succeeded.status == "succeeded"
+
+
+async def test_reap_stuck_at_max_attempts_transitions_to_dead(ctx: Context) -> None:
+    now = utcnow()
+    job_id = await ctx.jobs.enqueue(
+        ctx.tenant_id, job_type="a", payload={}, run_at=now, now=now, max_attempts=1
+    )
+    await ctx.jobs.claim(ctx.tenant_id, claimed_by="worker-1", now=now)
+
+    count = await ctx.jobs.reap_stuck(
+        ctx.tenant_id, claimed_before=now + timedelta(minutes=10), now=now + timedelta(minutes=15)
+    )
+
+    assert count == 1
+    job = await ctx.jobs.get(ctx.tenant_id, job_id)
+    assert job is not None
+    assert job.status == "dead"

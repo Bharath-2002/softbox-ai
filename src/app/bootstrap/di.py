@@ -54,6 +54,7 @@ from app.features.products.recompute_product_readiness import RecomputeProductRe
 from app.features.products.start_input_image_validation import StartInputImageValidation
 from app.features.settings.resolve_setting import ResolveSetting
 from app.features.settings.upsert_setting import UpsertSetting
+from app.features.system.reap_stuck_task_queue_jobs import ReapStuckTaskQueueJobs
 from app.features.taxonomy.attach_input_to_catalog_slot import AttachInputToCatalogSlot
 from app.features.taxonomy.create_attribute_definition import CreateAttributeDefinition
 from app.features.taxonomy.create_catalog_image_slot import CreateCatalogImageSlot
@@ -491,6 +492,12 @@ def get_catalog_image_qc_agent(
     return CatalogImageQcAgent(start, complete, fail, object_storage, quality_control)
 
 
+def get_reap_stuck_task_queue_jobs(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> ReapStuckTaskQueueJobs:
+    return ReapStuckTaskQueueJobs(uow_factory, clock)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -574,3 +581,6 @@ InputImageValidationAgentDep = Annotated[
 TemplateAnalysisAgentDep = Annotated[TemplateAnalysisAgent, Depends(get_template_analysis_agent)]
 GenerationRenderAgentDep = Annotated[GenerationRenderAgent, Depends(get_generation_render_agent)]
 CatalogImageQcAgentDep = Annotated[CatalogImageQcAgent, Depends(get_catalog_image_qc_agent)]
+ReapStuckTaskQueueJobsDep = Annotated[
+    ReapStuckTaskQueueJobs, Depends(get_reap_stuck_task_queue_jobs)
+]

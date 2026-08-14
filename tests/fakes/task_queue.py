@@ -100,3 +100,24 @@ class InMemoryTaskQueue:
             updated_at=now,
         )
         return "pending"
+
+    async def reap_stuck(
+        self, tenant_id: TenantId, *, claimed_before: datetime, now: datetime
+    ) -> int:
+        stuck = [
+            row
+            for row in self._rows.values()
+            if row.tenant_id == tenant_id
+            and row.status == "running"
+            and row.claimed_at is not None
+            and row.claimed_at < claimed_before
+        ]
+        for row in stuck:
+            await self.fail(
+                tenant_id,
+                row.id,
+                error=f"Job stayed 'running' past {claimed_before.isoformat()} "
+                "without completing or failing — its worker likely crashed.",
+                now=now,
+            )
+        return len(stuck)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import io
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
@@ -325,5 +325,37 @@ async def test_qc_next_requires_the_product_manage_capability() -> None:
 
     async with await _client(app) as http:
         response = await http.post("/api/v1/admin/generation/qc-next", headers=headers)
+
+    assert response.status_code == 403
+
+
+async def test_reap_stuck_jobs_over_http_requeues_a_stuck_job() -> None:
+    app, uow_factory, _clock, codec, _storage, _image_generation, _quality_control = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    claimed_at = _NOW - timedelta(minutes=20)
+    job_id = await uow_factory.task_queue.enqueue(
+        tenant_id, job_type="a", payload={}, run_at=claimed_at, now=claimed_at
+    )
+    await uow_factory.task_queue.claim(tenant_id, claimed_by="worker-1", now=claimed_at)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post("/api/v1/admin/generation/reap-stuck-jobs", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"reaped": 1}
+    job = await uow_factory.task_queue.get(tenant_id, job_id)
+    assert job is not None
+    assert job.status == "pending"
+
+
+async def test_reap_stuck_jobs_over_http_requires_the_product_manage_capability() -> None:
+    app, _uow_factory, _clock, codec, _storage, _image_generation, _quality_control = _build()
+    tenant_id_str = str(uuid.uuid4())
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="viewer", capabilities=[])
+
+    async with await _client(app) as http:
+        response = await http.post("/api/v1/admin/generation/reap-stuck-jobs", headers=headers)
 
     assert response.status_code == 403

@@ -28,6 +28,15 @@ jobs) must pass its own type explicitly, or it could claim a due job meant
 for an entirely different worker — a latent gap invisible while this
 codebase had only ever enqueued one job type, real the moment a second one
 exists.
+
+`reap_stuck()` is the other half of D19's "reconciler sweeps due, stuck and
+retryable runs" — `claim()`/`fail()` alone only recover a job whose worker
+called back in; a worker that crashes or is killed mid-job leaves its claim
+`running` forever with nothing to notice. `reap_stuck()` finds jobs stuck
+past `services.task_backoff.STUCK_JOB_THRESHOLD` and routes each through
+the exact same attempts-increment-then-backoff-or-dead decision `fail()`
+already owns, rather than duplicating that policy — a stuck job is a
+failure whose cause is "the worker went away," not a new kind of outcome.
 """
 
 from __future__ import annotations
@@ -89,4 +98,12 @@ class TaskQueue(Protocol):
         transitions to the terminal `dead` state with `error` preserved as
         `last_error` — D19's "poison-message handling". Returns the
         resulting status, `"pending"` or `"dead"`."""
+        ...
+
+    async def reap_stuck(
+        self, tenant_id: TenantId, *, claimed_before: datetime, now: datetime
+    ) -> int:
+        """Every `running` job whose `claimed_at < claimed_before` is routed
+        through `fail()`'s retry-or-dead decision with a synthetic
+        "stuck" error. Returns how many jobs were reaped."""
         ...

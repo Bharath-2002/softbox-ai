@@ -157,3 +157,26 @@ class SqlTaskQueue:
         await self._session.execute(stmt)
         await self._session.flush()
         return new_status
+
+    async def reap_stuck(
+        self, tenant_id: TenantId, *, claimed_before: datetime, now: datetime
+    ) -> int:
+        candidates = (
+            select(task_queue_jobs_table.c.id)
+            .where(
+                task_queue_jobs_table.c.tenant_id == tenant_id,
+                task_queue_jobs_table.c.status == "running",
+                task_queue_jobs_table.c.claimed_at < claimed_before,
+            )
+            .with_for_update(skip_locked=True)
+        )
+        job_ids = (await self._session.execute(candidates)).scalars().all()
+        for job_id in job_ids:
+            await self.fail(
+                tenant_id,
+                job_id,
+                error=f"Job stayed 'running' past {claimed_before.isoformat()} "
+                "without completing or failing — its worker likely crashed.",
+                now=now,
+            )
+        return len(job_ids)

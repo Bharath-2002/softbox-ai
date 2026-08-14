@@ -22,6 +22,14 @@ is oldest-due. It returns a bare boolean rather than a response body,
 because unlike a render attempt a QC verdict does not hand back a single
 new domain object worth serialising — the caller who wants to see the
 result reads the catalog image itself.
+
+``POST .../reap-stuck-jobs`` is the other half of D19's reconciler: a job
+whose worker crashed or was killed mid-attempt stays ``running`` forever
+otherwise, since nothing else notices its claim was never released. Lives
+here rather than a generic ``admin_system.py`` because every job type in
+this codebase today (``generation_item.render_requested``,
+``catalog_image.qc_requested``) is generation-pipeline work; worth
+revisiting once a non-generation job type exists (M7's publishing queue).
 """
 
 from __future__ import annotations
@@ -30,7 +38,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.api.deps.authorization import PrincipalDep, require_capability
-from app.bootstrap.di import CatalogImageQcAgentDep, GenerationRenderAgentDep
+from app.bootstrap.di import (
+    CatalogImageQcAgentDep,
+    GenerationRenderAgentDep,
+    ReapStuckTaskQueueJobsDep,
+)
 from app.entities.capabilities import Capability
 from app.entities.generation_item import GenerationItem
 from app.shared.ids import (
@@ -92,3 +104,18 @@ async def qc_next_catalog_image(
     assert principal.tenant_id is not None
     ran = await agent.run(tenant_id=principal.tenant_id)
     return QcNextResponse(ran=ran)
+
+
+class ReapStuckJobsResponse(BaseModel):
+    reaped: int
+
+
+@router.post(
+    "/generation/reap-stuck-jobs", response_model=ReapStuckJobsResponse, dependencies=_manage
+)
+async def reap_stuck_jobs(
+    principal: PrincipalDep, use_case: ReapStuckTaskQueueJobsDep
+) -> ReapStuckJobsResponse:
+    assert principal.tenant_id is not None
+    reaped = await use_case(principal.tenant_id)
+    return ReapStuckJobsResponse(reaped=reaped)
