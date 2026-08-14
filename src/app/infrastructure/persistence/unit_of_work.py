@@ -65,6 +65,7 @@ from app.infrastructure.persistence.product_repository import SqlProductReposito
 from app.infrastructure.persistence.product_variant_repository import (
     SqlProductVariantRepository,
 )
+from app.infrastructure.persistence.publication_repository import SqlPublicationRepository
 from app.infrastructure.persistence.quota_reservation_repository import (
     SqlQuotaReservationRepository,
 )
@@ -104,6 +105,7 @@ from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.product_input_image_repository import ProductInputImageRepository
 from app.services.ports.product_repository import ProductRepository
 from app.services.ports.product_variant_repository import ProductVariantRepository
+from app.services.ports.publication_repository import PublicationRepository
 from app.services.ports.quota_reservation_repository import QuotaReservationRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
@@ -167,6 +169,7 @@ class SqlUnitOfWork:
         self._catalog_images: SqlCatalogImageRepository | None = None
         self._content_drafts: SqlContentDraftRepository | None = None
         self._social_accounts: SqlSocialAccountRepository | None = None
+        self._publications: SqlPublicationRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -358,6 +361,12 @@ class SqlUnitOfWork:
             self._social_accounts = SqlSocialAccountRepository(self.session)
         return self._social_accounts
 
+    @property
+    def publications(self) -> PublicationRepository:
+        if self._publications is None:
+            self._publications = SqlPublicationRepository(self.session)
+        return self._publications
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -415,6 +424,7 @@ class SqlUnitOfWork:
             self._catalog_images = None
             self._content_drafts = None
             self._social_accounts = None
+            self._publications = None
 
 
 def make_unit_of_work_factory(

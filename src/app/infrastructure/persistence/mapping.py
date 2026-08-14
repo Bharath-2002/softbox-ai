@@ -65,6 +65,7 @@ from app.entities.image_slots import CatalogImageSlot, InputImageSlot
 from app.entities.product import Product, ProductStatus
 from app.entities.product_input_image import InputImageStatus, ProductInputImage
 from app.entities.product_variant import ProductVariant
+from app.entities.publication import Publication, PublicationStatus
 from app.entities.roles import Role
 from app.entities.session import Session
 from app.entities.setting import Setting, SettingScope
@@ -188,6 +189,14 @@ _content_draft_status_type = Enum(
 _social_account_status_type = Enum(
     SocialAccountStatus,
     name="social_account_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_publication_status_type = Enum(
+    PublicationStatus,
+    name="publication_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -631,6 +640,27 @@ social_accounts_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+publications_table = Table(
+    "publications",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("variant_id", Uuid(), nullable=False),
+    Column("channel_id", Uuid(), nullable=False),
+    Column("content_draft_id", Uuid(), nullable=True),
+    Column("idempotency_key", Text(), nullable=False),
+    Column("status", _publication_status_type, nullable=False),
+    Column("scheduled_at", DateTime(timezone=True), nullable=True),
+    Column("published_at", DateTime(timezone=True), nullable=True),
+    Column("external_post_id", Text(), nullable=True),
+    Column("permalink", Text(), nullable=True),
+    Column("payload", JSONB(), nullable=False),
+    Column("attempts", Integer(), nullable=False),
+    Column("last_error", Text(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -753,4 +783,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(CatalogImage, catalog_images_table)
     mapper_registry.map_imperatively(ContentDraft, content_drafts_table)
     mapper_registry.map_imperatively(SocialAccount, social_accounts_table)
+    mapper_registry.map_imperatively(Publication, publications_table)
     _mapped = True

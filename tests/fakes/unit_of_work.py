@@ -36,6 +36,7 @@ from tests.fakes.platform_admin_repository import InMemoryPlatformAdminRepositor
 from tests.fakes.product_input_image_repository import InMemoryProductInputImageRepository
 from tests.fakes.product_repository import InMemoryProductRepository
 from tests.fakes.product_variant_repository import InMemoryProductVariantRepository
+from tests.fakes.publication_repository import InMemoryPublicationRepository
 from tests.fakes.quota_reservation_repository import InMemoryQuotaReservationRepository
 from tests.fakes.session_repository import InMemorySessionRepository
 from tests.fakes.settings_repository import InMemorySettingsRepository
@@ -82,6 +83,7 @@ class FakeUnitOfWork:
         catalog_images: InMemoryCatalogImageRepository,
         content_drafts: InMemoryContentDraftRepository,
         social_accounts: InMemorySocialAccountRepository,
+        publications: InMemoryPublicationRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -115,6 +117,7 @@ class FakeUnitOfWork:
         self.catalog_images = catalog_images
         self.content_drafts = content_drafts
         self.social_accounts = social_accounts
+        self.publications = publications
         self.committed = False
         self.rolled_back = False
 
@@ -170,6 +173,7 @@ class FakeUnitOfWorkFactory:
         self.catalog_images = InMemoryCatalogImageRepository(self.product_variants)
         self.content_drafts = InMemoryContentDraftRepository()
         self.social_accounts = InMemorySocialAccountRepository()
+        self.publications = InMemoryPublicationRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -203,6 +207,7 @@ class FakeUnitOfWorkFactory:
             catalog_images=self.catalog_images,
             content_drafts=self.content_drafts,
             social_accounts=self.social_accounts,
+            publications=self.publications,
             tenant_id=tenant_id,
         )
 
