@@ -70,6 +70,7 @@ from app.infrastructure.persistence.quota_reservation_repository import (
 )
 from app.infrastructure.persistence.session_repository import SqlSessionRepository
 from app.infrastructure.persistence.settings_repository import SqlSettingsRepository
+from app.infrastructure.persistence.social_account_repository import SqlSocialAccountRepository
 from app.infrastructure.persistence.task_queue import SqlTaskQueue
 from app.infrastructure.persistence.tenant_membership_repository import (
     SqlTenantMembershipRepository,
@@ -106,6 +107,7 @@ from app.services.ports.product_variant_repository import ProductVariantReposito
 from app.services.ports.quota_reservation_repository import QuotaReservationRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
+from app.services.ports.social_account_repository import SocialAccountRepository
 from app.services.ports.task_queue import TaskQueue
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.tenant_repository import TenantRepository
@@ -164,6 +166,7 @@ class SqlUnitOfWork:
         self._generation_items: SqlGenerationItemRepository | None = None
         self._catalog_images: SqlCatalogImageRepository | None = None
         self._content_drafts: SqlContentDraftRepository | None = None
+        self._social_accounts: SqlSocialAccountRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -349,6 +352,12 @@ class SqlUnitOfWork:
             self._content_drafts = SqlContentDraftRepository(self.session)
         return self._content_drafts
 
+    @property
+    def social_accounts(self) -> SocialAccountRepository:
+        if self._social_accounts is None:
+            self._social_accounts = SqlSocialAccountRepository(self.session)
+        return self._social_accounts
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -405,6 +414,7 @@ class SqlUnitOfWork:
             self._generation_items = None
             self._catalog_images = None
             self._content_drafts = None
+            self._social_accounts = None
 
 
 def make_unit_of_work_factory(

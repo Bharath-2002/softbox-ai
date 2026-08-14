@@ -42,6 +42,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    LargeBinary,
     Table,
     Text,
     Uuid,
@@ -67,6 +68,7 @@ from app.entities.product_variant import ProductVariant
 from app.entities.roles import Role
 from app.entities.session import Session
 from app.entities.setting import Setting, SettingScope
+from app.entities.social_account import SocialAccount, SocialAccountStatus
 from app.entities.tenant_membership import TenantMembership
 from app.entities.user import User
 from app.entities.variant_axis import VariantAxis, VariantAxisValue
@@ -178,6 +180,14 @@ _catalog_image_status_type = Enum(
 _content_draft_status_type = Enum(
     ContentDraftStatus,
     name="content_draft_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_social_account_status_type = Enum(
+    SocialAccountStatus,
+    name="social_account_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -602,6 +612,25 @@ content_drafts_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+social_accounts_table = Table(
+    "social_accounts",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("provider", Text(), nullable=False),
+    Column("external_account_id", Text(), nullable=False),
+    Column("display_name", Text(), nullable=False),
+    Column("credentials_encrypted", LargeBinary(), nullable=True),
+    Column("encryption_key_id", Text(), nullable=True),
+    Column("scopes", ARRAY(Text()), nullable=False),
+    Column("access_expires_at", DateTime(timezone=True), nullable=True),
+    Column("refresh_expires_at", DateTime(timezone=True), nullable=True),
+    Column("status", _social_account_status_type, nullable=False),
+    Column("last_error", Text(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -723,4 +752,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(GenerationItem, generation_items_table)
     mapper_registry.map_imperatively(CatalogImage, catalog_images_table)
     mapper_registry.map_imperatively(ContentDraft, content_drafts_table)
+    mapper_registry.map_imperatively(SocialAccount, social_accounts_table)
     _mapped = True

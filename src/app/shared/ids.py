@@ -32,6 +32,8 @@ GenerationRequestId = NewType("GenerationRequestId", uuid.UUID)
 GenerationItemId = NewType("GenerationItemId", uuid.UUID)
 CatalogImageId = NewType("CatalogImageId", uuid.UUID)
 ContentDraftId = NewType("ContentDraftId", uuid.UUID)
+SocialAccountId = NewType("SocialAccountId", uuid.UUID)
+PublicationId = NewType("PublicationId", uuid.UUID)
 
 
 def new_tenant_id() -> TenantId:
@@ -120,3 +122,11 @@ def new_catalog_image_id() -> CatalogImageId:
 
 def new_content_draft_id() -> ContentDraftId:
     return ContentDraftId(uuid.uuid4())
+
+
+def new_social_account_id() -> SocialAccountId:
+    return SocialAccountId(uuid.uuid4())
+
+
+def new_publication_id() -> PublicationId:
+    return PublicationId(uuid.uuid4())

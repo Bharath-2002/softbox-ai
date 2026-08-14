@@ -60,6 +60,7 @@ from app.services.ports.product_variant_repository import ProductVariantReposito
 from app.services.ports.quota_reservation_repository import QuotaReservationRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
+from app.services.ports.social_account_repository import SocialAccountRepository
 from app.services.ports.task_queue import TaskQueue
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.tenant_repository import TenantRepository
@@ -156,6 +157,9 @@ class UnitOfWork(Protocol):
 
     @property
     def content_drafts(self) -> ContentDraftRepository: ...
+
+    @property
+    def social_accounts(self) -> SocialAccountRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""
