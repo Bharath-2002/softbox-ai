@@ -11,14 +11,17 @@ always retained"). `normalised_asset_id` is nullable and set once the
 normalising step produces a derivative asset — never in place of `asset_id`.
 
 `status` runs the §6.1 state machine: `captured -> validating -> normalising
--> ready / rejected`. Only `create` (-> `captured`) exists as an entity
-method so far, matching every other new entity this milestone — the
-`validating` step lands with a real Pillow-based use case; `normalising`
-needs an `ImageNormalisation` port with no adapter (background removal,
-colour calibration, perspective correction and de-creasing all need
-`rembg`/OpenCV or a hosted service — CLAUDE.md says stop and ask before
-adding a new third-party dependency, so that adapter does not exist yet, the
-same posture `VisionAnalysis` takes on the vision side).
+-> ready / rejected`. Asked the user directly (not a unilateral call, per
+CLAUDE.md's "stop and ask before a new external dependency") whether to
+build `normalising` with `rembg`/OpenCV, a hosted service, or defer it —
+the answer was to defer: only `validating` is real. `start_validating` goes
+`captured -> validating`; `mark_ready` goes `validating -> ready` directly,
+**skipping `normalising` entirely** rather than landing on a status nothing
+can move it out of. `NORMALISING` stays in the enum (matching the
+migration's `CHECK` constraint) as a real future state once an
+`ImageNormalisation` adapter exists, but no code path produces it today —
+the same "name the state, don't build the transition" posture every other
+not-yet-driven state in this milestone takes.
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from app.shared.errors import ValidationError
 from app.shared.ids import (
     AssetId,
     InputImageSlotId,
@@ -87,3 +91,23 @@ class ProductInputImage:
             created_at=now,
             updated_at=now,
         )
+
+    def start_validating(self, *, now: datetime) -> None:
+        if self.status != InputImageStatus.CAPTURED:
+            raise ValidationError(f"Cannot start validation from status {self.status.value!r}.")
+        self.status = InputImageStatus.VALIDATING
+        self.updated_at = now
+
+    def mark_ready(self, *, now: datetime) -> None:
+        if self.status != InputImageStatus.VALIDATING:
+            raise ValidationError(f"Cannot mark ready from status {self.status.value!r}.")
+        self.status = InputImageStatus.READY
+        self.rejection_reason = None
+        self.updated_at = now
+
+    def mark_rejected(self, *, reason: str, now: datetime) -> None:
+        if self.status != InputImageStatus.VALIDATING:
+            raise ValidationError(f"Cannot reject from status {self.status.value!r}.")
+        self.status = InputImageStatus.REJECTED
+        self.rejection_reason = reason
+        self.updated_at = now

@@ -240,9 +240,12 @@ async def test_update_persists_a_rejection(ctx: Context) -> None:
     image = _image(ctx)
     await ctx.images.add(image)
 
-    image.rejection_reason = "too blurry - retake in better light"
+    now = utcnow()
+    image.start_validating(now=now)
+    image.mark_rejected(reason="too blurry - retake in better light", now=now)
     await ctx.images.update(image)
 
     fetched = await ctx.images.get(ctx.tenant_id, image.id)
     assert fetched is not None
+    assert fetched.status.value == "rejected"
     assert fetched.rejection_reason == "too blurry - retake in better light"

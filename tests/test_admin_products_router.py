@@ -1,32 +1,47 @@
-"""HTTP-level test for ``/api/v1/admin/products/{id}/recompute-readiness`` —
-M4's first route reachable from outside a test.
+"""HTTP-level tests for ``/api/v1/admin/products*`` — M4's first routes
+reachable from outside a test.
 """
 
 from __future__ import annotations
 
+import io
 import uuid
 from datetime import UTC, datetime
 
 from httpx import ASGITransport, AsyncClient
+from PIL import Image
 
 from app.api.deps.authorization import get_token_issuer
+from app.api.deps.object_storage import get_object_storage
 from app.bootstrap.app import create_app
 from app.bootstrap.di import get_clock, get_uow_factory
 from app.bootstrap.settings import Settings
+from app.entities.asset import Asset, AssetKind
 from app.entities.category_spec_version import CategorySpecVersion
 from app.entities.product import Product
+from app.entities.product_input_image import ProductInputImage
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.services.ports.token_issuer import AccessTokenClaims
 from app.shared.clock import utcnow
-from app.shared.ids import TenantId, new_category_id, new_tenant_id, new_user_id
+from app.shared.ids import (
+    TenantId,
+    new_category_id,
+    new_input_image_slot_id,
+    new_product_id,
+    new_tenant_id,
+    new_user_id,
+)
 from tests.fakes.clock import FakeClock
+from tests.fakes.object_storage import InMemoryObjectStorage
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
 
 SIGNING_KEY = "a-sufficiently-long-signing-secret-for-tests-only"
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _build() -> tuple[object, FakeUnitOfWorkFactory, FakeClock, AccessTokenCodec]:
+def _build() -> tuple[
+    object, FakeUnitOfWorkFactory, FakeClock, AccessTokenCodec, InMemoryObjectStorage
+]:
     settings = Settings(
         environment="test", log_format="console", access_token_signing_key=SIGNING_KEY
     )
@@ -34,10 +49,12 @@ def _build() -> tuple[object, FakeUnitOfWorkFactory, FakeClock, AccessTokenCodec
     uow_factory = FakeUnitOfWorkFactory()
     clock = FakeClock(_NOW)
     codec = AccessTokenCodec(SIGNING_KEY)
+    storage = InMemoryObjectStorage()
     app.dependency_overrides[get_uow_factory] = lambda: uow_factory
     app.dependency_overrides[get_clock] = lambda: clock
     app.dependency_overrides[get_token_issuer] = lambda: codec
-    return app, uow_factory, clock, codec
+    app.dependency_overrides[get_object_storage] = lambda: storage
+    return app, uow_factory, clock, codec, storage
 
 
 def _bearer(
@@ -61,7 +78,7 @@ async def _client(app: object) -> AsyncClient:
 
 
 async def test_recomputing_readiness_over_http_marks_a_satisfied_product_ready() -> None:
-    app, uow_factory, _clock, codec = _build()
+    app, uow_factory, _clock, codec, _storage = _build()
     tenant_id_str = str(new_tenant_id())
     tenant_id = TenantId(uuid.UUID(tenant_id_str))
     category_id = new_category_id()
@@ -96,7 +113,7 @@ async def test_recomputing_readiness_over_http_marks_a_satisfied_product_ready()
 
 
 async def test_recomputing_readiness_requires_the_product_manage_capability() -> None:
-    app, uow_factory, _clock, codec = _build()
+    app, uow_factory, _clock, codec, _storage = _build()
     tenant_id_str = str(new_tenant_id())
     tenant_id = TenantId(uuid.UUID(tenant_id_str))
     category_id = new_category_id()
@@ -130,7 +147,7 @@ async def test_recomputing_readiness_requires_the_product_manage_capability() ->
 
 
 async def test_recomputing_readiness_for_an_unknown_product_is_not_found() -> None:
-    app, _uow_factory, _clock, codec = _build()
+    app, _uow_factory, _clock, codec, _storage = _build()
     tenant_id_str = str(new_tenant_id())
     headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
 
@@ -141,3 +158,55 @@ async def test_recomputing_readiness_for_an_unknown_product_is_not_found() -> No
 
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
+
+
+def _sharp_jpeg_bytes(size: int = 800) -> bytes:
+    image = Image.new("L", (size, size))
+    pixels = image.load()
+    square = 20
+    for y in range(size):
+        for x in range(size):
+            pixels[x, y] = 255 if (x // square + y // square) % 2 == 0 else 0
+    buf = io.BytesIO()
+    image.convert("RGB").save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+async def test_validating_an_input_image_over_http_reaches_ready() -> None:
+    app, uow_factory, _clock, codec, storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    data = _sharp_jpeg_bytes()
+    storage_key = storage.new_storage_key(tenant_id, kind="input", extension="jpg")
+    await storage.write(storage_key, data)
+    asset = Asset.create(
+        tenant_id,
+        storage_key=storage_key,
+        sha256="a" * 64,
+        mime="image/jpeg",
+        width=800,
+        height=800,
+        bytes_=len(data),
+        kind=AssetKind.INPUT,
+        source="upload",
+        now=_NOW,
+    )
+    await uow_factory.assets.add(asset)
+    image = ProductInputImage.create(
+        tenant_id,
+        new_product_id(),
+        input_image_slot_id=new_input_image_slot_id(),
+        asset_id=asset.id,
+        created_by=new_user_id(),
+        now=_NOW,
+    )
+    await uow_factory.product_input_images.add(image)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/input-images/{image.id}/validate", headers=headers
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"

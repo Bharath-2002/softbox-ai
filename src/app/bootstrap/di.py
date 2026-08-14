@@ -20,6 +20,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from app.agents.input_image_validation import InputImageValidationAgent
 from app.agents.template_analysis import TemplateAnalysisAgent
 from app.api.deps.authorization import get_token_issuer
 from app.api.deps.content_moderation import get_content_moderation_scanner
@@ -32,7 +33,9 @@ from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
 from app.features.identity.start_impersonation import StartImpersonation
+from app.features.products.complete_input_image_validation import CompleteInputImageValidation
 from app.features.products.recompute_product_readiness import RecomputeProductReadiness
+from app.features.products.start_input_image_validation import StartInputImageValidation
 from app.features.settings.resolve_setting import ResolveSetting
 from app.features.settings.upsert_setting import UpsertSetting
 from app.features.taxonomy.attach_input_to_catalog_slot import AttachInputToCatalogSlot
@@ -334,6 +337,26 @@ def get_recompute_product_readiness(
     return RecomputeProductReadiness(uow_factory, clock)
 
 
+def get_start_input_image_validation(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> StartInputImageValidation:
+    return StartInputImageValidation(uow_factory, clock)
+
+
+def get_complete_input_image_validation(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CompleteInputImageValidation:
+    return CompleteInputImageValidation(uow_factory, clock)
+
+
+def get_input_image_validation_agent(
+    start: Annotated[StartInputImageValidation, Depends(get_start_input_image_validation)],
+    complete: Annotated[CompleteInputImageValidation, Depends(get_complete_input_image_validation)],
+    object_storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+) -> InputImageValidationAgent:
+    return InputImageValidationAgent(start, complete, object_storage)
+
+
 def get_start_template_analysis(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> StartTemplateAnalysis:
@@ -426,5 +449,8 @@ ArchiveTemplateDep = Annotated[ArchiveTemplate, Depends(get_archive_template)]
 SeedStockPresetsDep = Annotated[SeedStockPresets, Depends(get_seed_stock_presets)]
 RecomputeProductReadinessDep = Annotated[
     RecomputeProductReadiness, Depends(get_recompute_product_readiness)
+]
+InputImageValidationAgentDep = Annotated[
+    InputImageValidationAgent, Depends(get_input_image_validation_agent)
 ]
 TemplateAnalysisAgentDep = Annotated[TemplateAnalysisAgent, Depends(get_template_analysis_agent)]
