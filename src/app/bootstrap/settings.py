@@ -115,6 +115,17 @@ class Settings(BaseSettings):
     # posture.
     content_generation_model: str = "placeholder-text-model"
 
+    # ── Publishing (D21) ─────────────────────────────────────────────────────
+    # "Platforms cap posts per account per day" (D21) - a real number, not
+    # invented here. This is a conservative placeholder pending the same
+    # per-provider verification D21 itself defers ("exact figures get
+    # verified against provider docs at implementation time and encoded in
+    # the adapter's `ChannelCapabilities`") - no real adapter exists yet to
+    # verify against. Config, not code, so tightening it later is a settings
+    # change, not a release, the same reasoning `generation_model` above
+    # already applies.
+    publish_rate_limit_per_account_per_day: int = 50
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def is_production(self) -> bool:

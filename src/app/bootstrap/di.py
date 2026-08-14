@@ -32,6 +32,7 @@ from app.api.deps.content_moderation import get_content_moderation_scanner
 from app.api.deps.image_generation import get_image_generation
 from app.api.deps.object_storage import get_object_storage
 from app.api.deps.quality_control import get_quality_control
+from app.api.deps.rate_limit import get_rate_limiter
 from app.api.deps.text_generation import get_text_generation
 from app.api.deps.vision_analysis import get_vision_analysis
 from app.features.assets.request_download import RequestDownload
@@ -77,6 +78,7 @@ from app.features.products.recompute_product_readiness import RecomputeProductRe
 from app.features.products.start_input_image_validation import StartInputImageValidation
 from app.features.publishing.complete_publication_publish import CompletePublicationPublish
 from app.features.publishing.create_publication import CreatePublication
+from app.features.publishing.defer_publication_publish import DeferPublicationPublish
 from app.features.publishing.fail_publication_publish import FailPublicationPublish
 from app.features.publishing.start_publication_publish import StartPublicationPublish
 from app.features.settings.resolve_setting import ResolveSetting
@@ -126,6 +128,7 @@ from app.services.ports.identity_provider import IdentityProvider
 from app.services.ports.image_generation import ImageGeneration
 from app.services.ports.object_storage import ObjectStorage
 from app.services.ports.quality_control import QualityControl
+from app.services.ports.rate_limiter import RateLimiter
 from app.services.ports.text_generation import TextGeneration
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
@@ -599,13 +602,33 @@ def get_fail_publication_publish(
     return FailPublicationPublish(uow_factory, clock)
 
 
+def get_defer_publication_publish(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> DeferPublicationPublish:
+    return DeferPublicationPublish(uow_factory, clock)
+
+
 def get_publish_channel_agent(
+    request: Request,
     start: Annotated[StartPublicationPublish, Depends(get_start_publication_publish)],
     complete: Annotated[CompletePublicationPublish, Depends(get_complete_publication_publish)],
     fail: Annotated[FailPublicationPublish, Depends(get_fail_publication_publish)],
+    defer: Annotated[DeferPublicationPublish, Depends(get_defer_publication_publish)],
     channel_publisher: Annotated[ChannelPublisher, Depends(get_channel_publisher)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    clock: ClockDep,
 ) -> PublishChannelAgent:
-    return PublishChannelAgent(start, complete, fail, channel_publisher)
+    settings = request.app.state.settings
+    return PublishChannelAgent(
+        start,
+        complete,
+        fail,
+        defer,
+        channel_publisher,
+        rate_limiter,
+        clock,
+        rate_limit_per_account_per_day=settings.publish_rate_limit_per_account_per_day,
+    )
 
 
 def get_approve_content_draft(uow_factory: UowFactoryDep, clock: ClockDep) -> ApproveContentDraft:

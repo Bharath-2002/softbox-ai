@@ -25,7 +25,7 @@ from uuid import UUID
 
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.shared.clock import Clock
-from app.shared.ids import ProductVariantId, PublicationId, TenantId
+from app.shared.ids import ProductVariantId, PublicationId, SocialAccountId, TenantId
 
 JOB_TYPE = "publication.publish_requested"
 CLAIMED_BY = "publish-channel-worker"
@@ -36,6 +36,7 @@ class PublicationPublishContext:
     job_id: UUID
     publication_id: PublicationId
     variant_id: ProductVariantId
+    channel_id: SocialAccountId
     idempotency_key: str
     payload: dict[str, Any]
 
@@ -69,6 +70,7 @@ class StartPublicationPublish:
                 job_id=job.id,
                 publication_id=publication.id,
                 variant_id=publication.variant_id,
+                channel_id=publication.channel_id,
                 idempotency_key=publication.idempotency_key,
                 payload=publication.payload,
             )

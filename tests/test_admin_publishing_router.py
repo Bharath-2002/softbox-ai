@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.deps.authorization import get_token_issuer
 from app.api.deps.channel_publisher import get_channel_publisher
+from app.api.deps.rate_limit import get_rate_limiter
 from app.bootstrap.app import create_app
 from app.bootstrap.di import get_clock, get_uow_factory
 from app.bootstrap.settings import Settings
@@ -27,6 +28,7 @@ from app.shared.clock import utcnow
 from app.shared.ids import TenantId, new_asset_id, new_product_id, new_user_id
 from tests.fakes.channel_publisher import FakeChannelPublisher
 from tests.fakes.clock import FakeClock
+from tests.fakes.rate_limiter import InMemoryRateLimiter
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
 
 SIGNING_KEY = "a-sufficiently-long-signing-secret-for-tests-only"
@@ -48,6 +50,7 @@ def _build() -> tuple[
     app.dependency_overrides[get_clock] = lambda: clock
     app.dependency_overrides[get_token_issuer] = lambda: codec
     app.dependency_overrides[get_channel_publisher] = lambda: channel_publisher
+    app.dependency_overrides[get_rate_limiter] = lambda: InMemoryRateLimiter()
     return app, uow_factory, clock, codec, channel_publisher
 
 

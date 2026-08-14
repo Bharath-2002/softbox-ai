@@ -130,3 +130,17 @@ class Publication:
         self.last_error = error
         self.status = PublicationStatus.FAILED if terminal else PublicationStatus.PENDING
         self.updated_at = now
+
+    def defer(self, *, reason: str, now: datetime) -> None:
+        """A rate-limited attempt, not a failed one: reverts to `PENDING`
+        for a later retry the same way `record_attempt_failure` does, but
+        deliberately does **not** increment `attempts` — see
+        `features.publishing.defer_publication_publish`'s docstring for
+        why consuming a bounded retry on every rate-limit rejection would
+        let a channel at its daily cap lose every queued publish for the
+        rest of the day, permanently."""
+        if self.status != PublicationStatus.PUBLISHING:
+            raise ValidationError(f"Cannot defer from status {self.status.value!r}.")
+        self.last_error = reason
+        self.status = PublicationStatus.PENDING
+        self.updated_at = now

@@ -34,6 +34,12 @@ disagree after a reaper sweep. Not a bug to fix here; a reader of this
 column should know it can lag, not assume it is authoritative for retry
 accounting the way ``task_queue_jobs.attempts`` is.
 
+``last_error`` also carries **non-error deferral reasons** — a per-account
+rate-limit rejection (``features.publishing.defer_publication_publish``)
+sets it without incrementing ``attempts`` or failing the row, since a rate
+limit is "not yet," not "this failed." A reader should not assume every
+populated ``last_error`` describes a genuine failure.
+
 ``channel_id`` is a composite FK into ``social_accounts`` — publishing
 targets a specific *connected account*, not a bare provider name.
 ``content_draft_id`` is nullable: D23's copy pipeline is optional per
