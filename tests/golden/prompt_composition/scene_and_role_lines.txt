@@ -1,0 +1,3 @@
+A flat-lay of Silk in maroon, {{input.garment_body}} shown.
+
+garment_body: Bunched detail, front-facing

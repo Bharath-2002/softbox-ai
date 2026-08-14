@@ -30,8 +30,8 @@ from typing import Any
 
 from app.services.spec_snapshot import find_catalog_slot
 
-_ANY_PLACEHOLDER_PATTERN = re.compile(r"\{\{(.*?)\}\}")
-_WELL_FORMED_PATTERN = re.compile(r"^\s*([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)\s*$")
+PLACEHOLDER_PATTERN = re.compile(r"\{\{(.*?)\}\}")
+PLACEHOLDER_SHAPE_PATTERN = re.compile(r"^\s*([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)\s*$")
 _NAMESPACES = frozenset({"input", "attr", "variant"})
 
 
@@ -54,9 +54,9 @@ def validate_template_placeholders(
     variant_keys = {a["key"] for a in snapshot.get("variant_axes", [])}
 
     problems: list[str] = []
-    for raw_match in _ANY_PLACEHOLDER_PATTERN.finditer(prompt_template):
+    for raw_match in PLACEHOLDER_PATTERN.finditer(prompt_template):
         body = raw_match.group(1)
-        shape_match = _WELL_FORMED_PATTERN.match(body)
+        shape_match = PLACEHOLDER_SHAPE_PATTERN.match(body)
         if shape_match is None:
             problems.append(
                 f"Malformed placeholder {{{{{body}}}}} - expected {{{{namespace.key}}}}."
