@@ -44,6 +44,7 @@ from app.infrastructure.persistence.category_repository import SqlCategoryReposi
 from app.infrastructure.persistence.category_spec_version_repository import (
     SqlCategorySpecVersionRepository,
 )
+from app.infrastructure.persistence.content_draft_repository import SqlContentDraftRepository
 from app.infrastructure.persistence.generation_item_repository import (
     SqlGenerationItemRepository,
 )
@@ -91,6 +92,7 @@ from app.services.ports.catalog_slot_input_requirement_repository import (
 from app.services.ports.catalog_template_repository import CatalogTemplateRepository
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.category_spec_version_repository import CategorySpecVersionRepository
+from app.services.ports.content_draft_repository import ContentDraftRepository
 from app.services.ports.generation_item_repository import GenerationItemRepository
 from app.services.ports.generation_request_repository import GenerationRequestRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
@@ -161,6 +163,7 @@ class SqlUnitOfWork:
         self._generation_requests: SqlGenerationRequestRepository | None = None
         self._generation_items: SqlGenerationItemRepository | None = None
         self._catalog_images: SqlCatalogImageRepository | None = None
+        self._content_drafts: SqlContentDraftRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -340,6 +343,12 @@ class SqlUnitOfWork:
             self._catalog_images = SqlCatalogImageRepository(self.session)
         return self._catalog_images
 
+    @property
+    def content_drafts(self) -> ContentDraftRepository:
+        if self._content_drafts is None:
+            self._content_drafts = SqlContentDraftRepository(self.session)
+        return self._content_drafts
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -395,6 +404,7 @@ class SqlUnitOfWork:
             self._generation_requests = None
             self._generation_items = None
             self._catalog_images = None
+            self._content_drafts = None
 
 
 def make_unit_of_work_factory(

@@ -56,6 +56,7 @@ from app.entities.catalog_slot_input_requirement import CatalogSlotInputRequirem
 from app.entities.catalog_template import CatalogTemplate, TemplateKind, TemplateStatus
 from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion, SpecVersionStatus
+from app.entities.content_draft import ContentDraft, ContentDraftStatus
 from app.entities.generation_item import GenerationItem, GenerationItemStatus
 from app.entities.generation_request import GenerationRequest, GenerationRequestStatus
 from app.entities.identity import Identity
@@ -169,6 +170,14 @@ _generation_item_status_type = Enum(
 _catalog_image_status_type = Enum(
     CatalogImageStatus,
     name="catalog_image_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_content_draft_status_type = Enum(
+    ContentDraftStatus,
+    name="content_draft_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -568,6 +577,28 @@ catalog_images_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+content_drafts_table = Table(
+    "content_drafts",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("variant_id", Uuid(), nullable=False),
+    Column("channel", Text(), nullable=False),
+    Column("locale", Text(), nullable=False),
+    Column("title", Text(), nullable=True),
+    Column("body", Text(), nullable=False),
+    Column("hashtags", ARRAY(Text()), nullable=False),
+    Column("cta", Text(), nullable=True),
+    Column("alt_text", Text(), nullable=False),
+    Column("model", Text(), nullable=False),
+    Column("prompt_version", Text(), nullable=False),
+    Column("status", _content_draft_status_type, nullable=False),
+    Column("edited_by", Uuid(), nullable=True),
+    Column("superseded_by", Uuid(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -688,4 +719,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(GenerationRequest, generation_requests_table)
     mapper_registry.map_imperatively(GenerationItem, generation_items_table)
     mapper_registry.map_imperatively(CatalogImage, catalog_images_table)
+    mapper_registry.map_imperatively(ContentDraft, content_drafts_table)
     _mapped = True

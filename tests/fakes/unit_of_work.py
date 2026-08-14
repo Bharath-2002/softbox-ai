@@ -25,6 +25,7 @@ from tests.fakes.catalog_slot_input_requirement_repository import (
 from tests.fakes.catalog_template_repository import InMemoryCatalogTemplateRepository
 from tests.fakes.category_repository import InMemoryCategoryRepository
 from tests.fakes.category_spec_version_repository import InMemoryCategorySpecVersionRepository
+from tests.fakes.content_draft_repository import InMemoryContentDraftRepository
 from tests.fakes.generation_item_repository import InMemoryGenerationItemRepository
 from tests.fakes.generation_request_repository import InMemoryGenerationRequestRepository
 from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
@@ -78,6 +79,7 @@ class FakeUnitOfWork:
         generation_requests: InMemoryGenerationRequestRepository,
         generation_items: InMemoryGenerationItemRepository,
         catalog_images: InMemoryCatalogImageRepository,
+        content_drafts: InMemoryContentDraftRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -109,6 +111,7 @@ class FakeUnitOfWork:
         self.generation_requests = generation_requests
         self.generation_items = generation_items
         self.catalog_images = catalog_images
+        self.content_drafts = content_drafts
         self.committed = False
         self.rolled_back = False
 
@@ -162,6 +165,7 @@ class FakeUnitOfWorkFactory:
         self.generation_requests = InMemoryGenerationRequestRepository()
         self.generation_items = InMemoryGenerationItemRepository()
         self.catalog_images = InMemoryCatalogImageRepository(self.product_variants)
+        self.content_drafts = InMemoryContentDraftRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -193,6 +197,7 @@ class FakeUnitOfWorkFactory:
             generation_requests=self.generation_requests,
             generation_items=self.generation_items,
             catalog_images=self.catalog_images,
+            content_drafts=self.content_drafts,
             tenant_id=tenant_id,
         )
 
