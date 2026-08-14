@@ -15,6 +15,13 @@ automatic trigger" posture every other M5 admin route follows.
 Returns ``null`` when nothing was claimable — the caller (a human clicking
 "render next," or eventually a poll loop) can tell "nothing due right now"
 apart from "one job actually ran" without a separate boolean field.
+
+``POST .../qc-next`` is the same shape for D20's QC step:
+``CatalogImageQcAgent`` claims whatever ``catalog_image.qc_requested`` job
+is oldest-due. It returns a bare boolean rather than a response body,
+because unlike a render attempt a QC verdict does not hand back a single
+new domain object worth serialising — the caller who wants to see the
+result reads the catalog image itself.
 """
 
 from __future__ import annotations
@@ -23,7 +30,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.api.deps.authorization import PrincipalDep, require_capability
-from app.bootstrap.di import GenerationRenderAgentDep
+from app.bootstrap.di import CatalogImageQcAgentDep, GenerationRenderAgentDep
 from app.entities.capabilities import Capability
 from app.entities.generation_item import GenerationItem
 from app.shared.ids import (
@@ -72,3 +79,16 @@ async def render_next_generation_item(
     assert principal.tenant_id is not None
     item = await agent.run(tenant_id=principal.tenant_id)
     return GenerationItemResponse.from_entity(item) if item is not None else None
+
+
+class QcNextResponse(BaseModel):
+    ran: bool
+
+
+@router.post("/generation/qc-next", response_model=QcNextResponse, dependencies=_manage)
+async def qc_next_catalog_image(
+    principal: PrincipalDep, agent: CatalogImageQcAgentDep
+) -> QcNextResponse:
+    assert principal.tenant_id is not None
+    ran = await agent.run(tenant_id=principal.tenant_id)
+    return QcNextResponse(ran=ran)

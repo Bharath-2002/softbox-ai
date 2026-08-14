@@ -20,6 +20,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from app.agents.catalog_image_qc import CatalogImageQcAgent
 from app.agents.generation_render import GenerationRenderAgent
 from app.agents.input_image_validation import InputImageValidationAgent
 from app.agents.template_analysis import TemplateAnalysisAgent
@@ -27,12 +28,16 @@ from app.api.deps.authorization import get_token_issuer
 from app.api.deps.content_moderation import get_content_moderation_scanner
 from app.api.deps.image_generation import get_image_generation
 from app.api.deps.object_storage import get_object_storage
+from app.api.deps.quality_control import get_quality_control
 from app.api.deps.vision_analysis import get_vision_analysis
 from app.features.assets.request_download import RequestDownload
 from app.features.assets.request_upload import RequestUpload
 from app.features.assets.verify_and_register_upload import VerifyAndRegisterUpload
+from app.features.generation.complete_catalog_image_qc import CompleteCatalogImageQc
 from app.features.generation.complete_generation_item_render import CompleteGenerationItemRender
+from app.features.generation.fail_catalog_image_qc import FailCatalogImageQc
 from app.features.generation.fail_generation_item_render import FailGenerationItemRender
+from app.features.generation.start_catalog_image_qc import StartCatalogImageQc
 from app.features.generation.start_generation_item_render import StartGenerationItemRender
 from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
@@ -91,6 +96,7 @@ from app.services.ports.content_moderation import ContentModerationScanner
 from app.services.ports.identity_provider import IdentityProvider
 from app.services.ports.image_generation import ImageGeneration
 from app.services.ports.object_storage import ObjectStorage
+from app.services.ports.quality_control import QualityControl
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.services.ports.vision_analysis import VisionAnalysis
@@ -461,6 +467,30 @@ def get_generation_render_agent(
     return GenerationRenderAgent(start, complete, fail, object_storage, image_generation)
 
 
+def get_start_catalog_image_qc(uow_factory: UowFactoryDep, clock: ClockDep) -> StartCatalogImageQc:
+    return StartCatalogImageQc(uow_factory, clock)
+
+
+def get_complete_catalog_image_qc(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CompleteCatalogImageQc:
+    return CompleteCatalogImageQc(uow_factory, clock)
+
+
+def get_fail_catalog_image_qc(uow_factory: UowFactoryDep, clock: ClockDep) -> FailCatalogImageQc:
+    return FailCatalogImageQc(uow_factory, clock)
+
+
+def get_catalog_image_qc_agent(
+    start: Annotated[StartCatalogImageQc, Depends(get_start_catalog_image_qc)],
+    complete: Annotated[CompleteCatalogImageQc, Depends(get_complete_catalog_image_qc)],
+    fail: Annotated[FailCatalogImageQc, Depends(get_fail_catalog_image_qc)],
+    object_storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+    quality_control: Annotated[QualityControl, Depends(get_quality_control)],
+) -> CatalogImageQcAgent:
+    return CatalogImageQcAgent(start, complete, fail, object_storage, quality_control)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -543,3 +573,4 @@ InputImageValidationAgentDep = Annotated[
 ]
 TemplateAnalysisAgentDep = Annotated[TemplateAnalysisAgent, Depends(get_template_analysis_agent)]
 GenerationRenderAgentDep = Annotated[GenerationRenderAgent, Depends(get_generation_render_agent)]
+CatalogImageQcAgentDep = Annotated[CatalogImageQcAgent, Depends(get_catalog_image_qc_agent)]
