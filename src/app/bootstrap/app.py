@@ -20,6 +20,7 @@ from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.infrastructure.auth.oidc_provider import AuthlibIdentityProvider
 from app.infrastructure.email.console_sender import ConsoleEmailSender
 from app.infrastructure.email.smtp_sender import SmtpEmailSender
+from app.infrastructure.moderation.null_scanner import NullContentModerationScanner
 from app.infrastructure.observability.logging import configure_logging
 from app.infrastructure.persistence.database import create_engine, create_session_factory, ping
 from app.infrastructure.persistence.rate_limiter import SqlRateLimiter
@@ -122,6 +123,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         base_url=settings.object_storage_public_base_url,
         signing_key=settings.object_storage_signing_key.get_secret_value(),
     )
+
+    # Read by app.api.deps.content_moderation.get_content_moderation_scanner.
+    # No provider is configured (see CHECKLIST.md M3 STATE) - always the null
+    # scanner today, the same "only one backend exists" shape object storage
+    # has, minus the settings-driven choice since there is nothing to choose
+    # between yet.
+    app.state.content_moderation_scanner = NullContentModerationScanner()
 
     # Read by app.bootstrap.di.get_google_identity_provider. Constructing
     # this never makes a network call (Authlib's OAuth().register() only

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 
-from app.entities.asset import Asset, AssetKind
+from app.entities.asset import UPLOADABLE_ASSET_KINDS, Asset, AssetKind
 from app.services.image_inspection import inspect_image
 from app.services.ports.content_moderation import ContentModerationScanner
 from app.services.ports.object_storage import ObjectStorage
@@ -25,8 +25,6 @@ from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.shared.clock import Clock
 from app.shared.errors import ValidationError
 from app.shared.ids import TenantId, UserId
-
-_UPLOADABLE_KINDS = frozenset({AssetKind.TEMPLATE, AssetKind.INPUT})
 
 
 class VerifyAndRegisterUpload:
@@ -55,7 +53,7 @@ class VerifyAndRegisterUpload:
         kind: AssetKind,
         uploaded_by: UserId,
     ) -> Asset:
-        if kind not in _UPLOADABLE_KINDS:
+        if kind not in UPLOADABLE_ASSET_KINDS:
             raise ValidationError(f"Kind {kind.value!r} cannot be uploaded directly.")
 
         data = await self._object_storage.read(storage_key)

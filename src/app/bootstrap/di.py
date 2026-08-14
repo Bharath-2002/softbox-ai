@@ -21,6 +21,10 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from app.api.deps.authorization import get_token_issuer
+from app.api.deps.content_moderation import get_content_moderation_scanner
+from app.api.deps.object_storage import get_object_storage
+from app.features.assets.request_upload import RequestUpload
+from app.features.assets.verify_and_register_upload import VerifyAndRegisterUpload
 from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
@@ -57,7 +61,9 @@ from app.features.taxonomy.update_category import UpdateCategory
 from app.features.taxonomy.update_input_image_slot import UpdateInputImageSlot
 from app.features.taxonomy.update_variant_axis import UpdateVariantAxis
 from app.features.taxonomy.update_variant_axis_value import UpdateVariantAxisValue
+from app.services.ports.content_moderation import ContentModerationScanner
 from app.services.ports.identity_provider import IdentityProvider
+from app.services.ports.object_storage import ObjectStorage
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.shared.clock import Clock
@@ -260,6 +266,23 @@ def get_resolve_setting(uow_factory: UowFactoryDep) -> ResolveSetting:
     return ResolveSetting(uow_factory)
 
 
+def get_request_upload(
+    object_storage: Annotated[ObjectStorage, Depends(get_object_storage)], clock: ClockDep
+) -> RequestUpload:
+    return RequestUpload(object_storage, clock)
+
+
+def get_verify_and_register_upload(
+    uow_factory: UowFactoryDep,
+    object_storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+    moderation_scanner: Annotated[
+        ContentModerationScanner, Depends(get_content_moderation_scanner)
+    ],
+    clock: ClockDep,
+) -> VerifyAndRegisterUpload:
+    return VerifyAndRegisterUpload(uow_factory, object_storage, moderation_scanner, clock)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -312,3 +335,7 @@ ListCatalogSlotInputRequirementsDep = Annotated[
 ]
 UpsertSettingDep = Annotated[UpsertSetting, Depends(get_upsert_setting)]
 ResolveSettingDep = Annotated[ResolveSetting, Depends(get_resolve_setting)]
+RequestUploadDep = Annotated[RequestUpload, Depends(get_request_upload)]
+VerifyAndRegisterUploadDep = Annotated[
+    VerifyAndRegisterUpload, Depends(get_verify_and_register_upload)
+]

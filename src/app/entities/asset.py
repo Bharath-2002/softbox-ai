@@ -35,6 +35,11 @@ class AssetKind(StrEnum):
     DERIVATIVE = "derivative"
 
 
+# `generated`/`derivative` assets are written directly by internal pipeline
+# code (M5/M6) - only these two kinds ever originate from a browser upload.
+UPLOADABLE_ASSET_KINDS = frozenset({AssetKind.TEMPLATE, AssetKind.INPUT})
+
+
 @dataclass
 class Asset:
     id: AssetId

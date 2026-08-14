@@ -4,7 +4,9 @@ docstring).
 
 There is no separate storage *service* to presign a URL against locally, so
 the "presigned URL" this adapter hands back points at this same process's
-own upload/download routes (``api/routers/uploads.py``), carrying a signed,
+own upload/download routes (``api/routers/webhooks.py`` — see
+``docs/ARCHITECTURE.md``'s §8 router table, which already designates
+``/api/v1/webhooks/*`` for "upload verification"), carrying a signed,
 short-lived JWT that embeds the storage key, the allowed content type and
 size cap, and a purpose (``put``/``get``) — verified by that route before
 it touches the filesystem, exactly as an S3 presigned URL's signature is
@@ -23,15 +25,15 @@ import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from joserfc import jwt
 from joserfc.jwk import OctKey
 from joserfc.jwt import JWTClaimsRegistry
 
-from app.services.ports.object_storage import PresignedUpload
+from app.services.ports.object_storage import PresignedUpload, UploadClaims
 from app.shared.errors import NotFoundError, ValidationError
-from app.shared.ids import TenantId
+from app.shared.ids import TenantId, UserId
 
 _ALGORITHM = "HS256"
 _ISSUER = "softbox-ai-local-object-storage"
@@ -57,6 +59,9 @@ class PresignTokenCodec:
         expires_in: timedelta,
         content_type: str | None = None,
         max_bytes: int | None = None,
+        tenant_id: str | None = None,
+        kind: str | None = None,
+        uploaded_by: str | None = None,
     ) -> str:
         payload: dict[str, Any] = {
             "storage_key": storage_key,
@@ -69,6 +74,12 @@ class PresignTokenCodec:
             payload["content_type"] = content_type
         if max_bytes is not None:
             payload["max_bytes"] = max_bytes
+        if tenant_id is not None:
+            payload["tenant_id"] = tenant_id
+        if kind is not None:
+            payload["kind"] = kind
+        if uploaded_by is not None:
+            payload["uploaded_by"] = uploaded_by
         return jwt.encode({"alg": _ALGORITHM}, payload, self._key)
 
     def decode(self, token: str, *, purpose: str, now: datetime) -> dict[str, Any]:
@@ -101,7 +112,10 @@ class LocalObjectStorage:
     async def presign_put(
         self,
         *,
+        tenant_id: TenantId,
         storage_key: str,
+        kind: str,
+        uploaded_by: UserId,
         content_type: str,
         max_bytes: int,
         now: datetime,
@@ -114,9 +128,12 @@ class LocalObjectStorage:
             expires_in=expires_in,
             content_type=content_type,
             max_bytes=max_bytes,
+            tenant_id=str(tenant_id),
+            kind=kind,
+            uploaded_by=str(uploaded_by),
         )
         return PresignedUpload(
-            url=f"{self._base_url}/api/v1/uploads/{token}",
+            url=f"{self._base_url}/api/v1/webhooks/uploads/{token}",
             method="PUT",
             headers={"Content-Type": content_type},
             storage_key=storage_key,
@@ -127,7 +144,26 @@ class LocalObjectStorage:
         token = self._tokens.encode(
             storage_key=storage_key, purpose="get", now=now, expires_in=expires_in
         )
-        return f"{self._base_url}/api/v1/uploads/{token}"
+        return f"{self._base_url}/api/v1/webhooks/uploads/{token}"
+
+    async def accept_upload(self, token: str, data: bytes, *, now: datetime) -> UploadClaims:
+        claims = self._tokens.decode(token, purpose="put", now=now)
+        max_bytes = claims.get("max_bytes")
+        if max_bytes is not None and len(data) > max_bytes:
+            raise ValidationError("Upload exceeds the size declared when it was requested.")
+
+        storage_key = str(claims["storage_key"])
+        await self.write(storage_key, data)
+        return UploadClaims(
+            tenant_id=TenantId(UUID(str(claims["tenant_id"]))),
+            storage_key=storage_key,
+            kind=str(claims["kind"]),
+            uploaded_by=UserId(UUID(str(claims["uploaded_by"]))),
+        )
+
+    async def resolve_download(self, token: str, *, now: datetime) -> bytes:
+        claims = self._tokens.decode(token, purpose="get", now=now)
+        return await self.read(str(claims["storage_key"]))
 
     async def read(self, storage_key: str) -> bytes:
         path = self._path_for(storage_key)
