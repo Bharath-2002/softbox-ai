@@ -25,13 +25,22 @@ from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
 from app.features.identity.start_impersonation import StartImpersonation
+from app.features.taxonomy.create_attribute_definition import CreateAttributeDefinition
 from app.features.taxonomy.create_category import CreateCategory
+from app.features.taxonomy.create_variant_axis import CreateVariantAxis
+from app.features.taxonomy.create_variant_axis_value import CreateVariantAxisValue
 from app.features.taxonomy.get_category import GetCategory
 from app.features.taxonomy.get_published_category_spec import GetPublishedCategorySpec
+from app.features.taxonomy.list_attribute_definitions import ListAttributeDefinitions
 from app.features.taxonomy.list_category_children import ListCategoryChildren
+from app.features.taxonomy.list_variant_axes import ListVariantAxes
+from app.features.taxonomy.list_variant_axis_values import ListVariantAxisValues
 from app.features.taxonomy.move_category import MoveCategory
 from app.features.taxonomy.publish_category_spec import PublishCategorySpec
+from app.features.taxonomy.update_attribute_definition import UpdateAttributeDefinition
 from app.features.taxonomy.update_category import UpdateCategory
+from app.features.taxonomy.update_variant_axis import UpdateVariantAxis
+from app.features.taxonomy.update_variant_axis_value import UpdateVariantAxisValue
 from app.services.ports.identity_provider import IdentityProvider
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
@@ -127,6 +136,50 @@ def get_list_category_children(uow_factory: UowFactoryDep) -> ListCategoryChildr
     return ListCategoryChildren(uow_factory)
 
 
+def get_create_attribute_definition(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CreateAttributeDefinition:
+    return CreateAttributeDefinition(uow_factory, clock)
+
+
+def get_update_attribute_definition(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> UpdateAttributeDefinition:
+    return UpdateAttributeDefinition(uow_factory, clock)
+
+
+def get_list_attribute_definitions(uow_factory: UowFactoryDep) -> ListAttributeDefinitions:
+    return ListAttributeDefinitions(uow_factory)
+
+
+def get_create_variant_axis(uow_factory: UowFactoryDep, clock: ClockDep) -> CreateVariantAxis:
+    return CreateVariantAxis(uow_factory, clock)
+
+
+def get_update_variant_axis(uow_factory: UowFactoryDep, clock: ClockDep) -> UpdateVariantAxis:
+    return UpdateVariantAxis(uow_factory, clock)
+
+
+def get_list_variant_axes(uow_factory: UowFactoryDep) -> ListVariantAxes:
+    return ListVariantAxes(uow_factory)
+
+
+def get_create_variant_axis_value(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CreateVariantAxisValue:
+    return CreateVariantAxisValue(uow_factory, clock)
+
+
+def get_update_variant_axis_value(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> UpdateVariantAxisValue:
+    return UpdateVariantAxisValue(uow_factory, clock)
+
+
+def get_list_variant_axis_values(uow_factory: UowFactoryDep) -> ListVariantAxisValues:
+    return ListVariantAxisValues(uow_factory)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -136,3 +189,22 @@ GetPublishedCategorySpecDep = Annotated[
 ]
 GetCategoryDep = Annotated[GetCategory, Depends(get_category_use_case)]
 ListCategoryChildrenDep = Annotated[ListCategoryChildren, Depends(get_list_category_children)]
+CreateAttributeDefinitionDep = Annotated[
+    CreateAttributeDefinition, Depends(get_create_attribute_definition)
+]
+UpdateAttributeDefinitionDep = Annotated[
+    UpdateAttributeDefinition, Depends(get_update_attribute_definition)
+]
+ListAttributeDefinitionsDep = Annotated[
+    ListAttributeDefinitions, Depends(get_list_attribute_definitions)
+]
+CreateVariantAxisDep = Annotated[CreateVariantAxis, Depends(get_create_variant_axis)]
+UpdateVariantAxisDep = Annotated[UpdateVariantAxis, Depends(get_update_variant_axis)]
+ListVariantAxesDep = Annotated[ListVariantAxes, Depends(get_list_variant_axes)]
+CreateVariantAxisValueDep = Annotated[
+    CreateVariantAxisValue, Depends(get_create_variant_axis_value)
+]
+UpdateVariantAxisValueDep = Annotated[
+    UpdateVariantAxisValue, Depends(get_update_variant_axis_value)
+]
+ListVariantAxisValuesDep = Annotated[ListVariantAxisValues, Depends(get_list_variant_axis_values)]
