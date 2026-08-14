@@ -29,11 +29,21 @@ full constraint-interaction reasoning and
 order proven to work and the reversed order proven to fail, against real
 Postgres.
 
-Only `create()` and `mark_superseded()` land in this chunk — the QC/approval
-transitions (`pending_qc -> qc_failed / pending_approval / approved`, etc.)
-have no caller yet since no QC agent or approval use case exists, same
-"name every state, build only the driven transitions" posture every other
-entity in this milestone follows.
+`create()` and `mark_superseded()` shipped first; `mark_qc_passed`/`mark_qc_failed`/
+`mark_human_review` (D20) land alongside the `QualityControl` port, once a QC agent
+exists to drive them. **`mark_qc_passed` always lands on `pending_approval`**, never
+`approved` directly — `docs/ARCHITECTURE.md`'s own compressed state diagram
+(`pending_qc ▶ qc_failed | pending_approval ▶ approved | rejected`) shows exactly one
+QC-pass target, and no `approval.required`-style setting is registered anywhere in this
+codebase today (`entities.setting`'s docstring uses that key only as an illustrative
+example of D16's *shape*, not a shipped default) — inventing an auto-approve branch off
+an unset setting would be guessing at a value nothing has ever configured, the same
+mistake `CreateProduct`'s `price_currency` discussion caught and avoided. Auto-approve
+when approval is disabled is M6's job ("Approval & content"), once a real approval
+feature exists to make that call for real.
+
+The QC/approval transitions this chunk does *not* add
+(`pending_approval -> approved/rejected`) still have no caller — that is M6, not M5.
 """
 
 from __future__ import annotations
@@ -116,4 +126,31 @@ class CatalogImage:
         if self.superseded_by is not None:
             raise ValidationError(f"Catalog image {self.id} is already superseded.")
         self.superseded_by = by
+        self.updated_at = now
+
+    def mark_qc_passed(self, *, qc_result: dict[str, Any], now: datetime) -> None:
+        if self.status != CatalogImageStatus.PENDING_QC:
+            raise ValidationError(f"Cannot pass QC from status {self.status.value!r}.")
+        self.status = CatalogImageStatus.PENDING_APPROVAL
+        self.qc_result = qc_result
+        self.updated_at = now
+
+    def mark_qc_failed(self, *, qc_result: dict[str, Any], now: datetime) -> None:
+        if self.status != CatalogImageStatus.PENDING_QC:
+            raise ValidationError(f"Cannot fail QC from status {self.status.value!r}.")
+        self.status = CatalogImageStatus.QC_FAILED
+        self.qc_result = qc_result
+        self.updated_at = now
+
+    def mark_human_review(self, *, reason: str, now: datetime) -> None:
+        """`qc_failed -> human_review` — D20's retry ladder exhausted (or,
+        for the retry-can't-even-be-attempted case, no alternate template
+        exists). Reachable **regardless of the tenant's approval setting** —
+        this is the one place a QC failure always surfaces to a human."""
+        if self.status != CatalogImageStatus.QC_FAILED:
+            raise ValidationError(
+                f"Cannot escalate to human review from status {self.status.value!r}."
+            )
+        self.status = CatalogImageStatus.HUMAN_REVIEW
+        self.rejection_reason = reason
         self.updated_at = now

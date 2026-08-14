@@ -38,6 +38,12 @@ ever reach this pipeline as reference material.
 `generation_request` the item was fanned out from), so this loads the
 parent request to get it — the same one-extra-lookup shape
 `FanOutGenerationItems` already pays to reach a request's `variant_id`.
+
+Writes a `catalog_image.qc_requested` outbox event for the new row, in the
+same transaction — the same "real capability, event emitted, no consumer
+yet" shape `FanOutGenerationItems`' own `generation_item.render_requested`
+event used before this worker existed to consume it. The QC agent that
+claims and acts on this event is a later chunk.
 """
 
 from __future__ import annotations
@@ -133,6 +139,13 @@ class CompleteGenerationItemRender:
                 live.mark_superseded(by=new_image.id, now=now)
                 await uow.catalog_images.update(live)
             await uow.catalog_images.add(new_image)
+
+            await uow.outbox_events.add(
+                tenant_id,
+                event_type="catalog_image.qc_requested",
+                payload={"catalog_image_id": str(new_image.id)},
+                now=now,
+            )
 
             await uow.task_queue.complete(tenant_id, job_id, now=now)
 

@@ -120,6 +120,11 @@ async def test_registers_a_generated_asset_and_a_pending_qc_catalog_image() -> N
     assert images[0].generation_item_id == item.id
     assert images[0].superseded_by is None
 
+    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
+    assert len(events) == 1
+    assert events[0].event_type == "catalog_image.qc_requested"
+    assert events[0].payload == {"catalog_image_id": str(images[0].id)}
+
 
 async def test_supersedes_an_existing_live_catalog_image() -> None:
     use_case, _storage, uow_factory = _use_case()
