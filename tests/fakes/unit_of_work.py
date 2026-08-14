@@ -28,6 +28,7 @@ from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
 from tests.fakes.identity_repository import InMemoryIdentityRepository
 from tests.fakes.input_image_slot_repository import InMemoryInputImageSlotRepository
 from tests.fakes.platform_admin_repository import InMemoryPlatformAdminRepository
+from tests.fakes.product_input_image_repository import InMemoryProductInputImageRepository
 from tests.fakes.product_repository import InMemoryProductRepository
 from tests.fakes.product_variant_repository import InMemoryProductVariantRepository
 from tests.fakes.session_repository import InMemorySessionRepository
@@ -62,6 +63,7 @@ class FakeUnitOfWork:
         catalog_templates: InMemoryCatalogTemplateRepository,
         products: InMemoryProductRepository,
         product_variants: InMemoryProductVariantRepository,
+        product_input_images: InMemoryProductInputImageRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -85,6 +87,7 @@ class FakeUnitOfWork:
         self.catalog_templates = catalog_templates
         self.products = products
         self.product_variants = product_variants
+        self.product_input_images = product_input_images
         self.committed = False
         self.rolled_back = False
 
@@ -130,6 +133,7 @@ class FakeUnitOfWorkFactory:
         self.catalog_templates = InMemoryCatalogTemplateRepository()
         self.products = InMemoryProductRepository()
         self.product_variants = InMemoryProductVariantRepository()
+        self.product_input_images = InMemoryProductInputImageRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -153,6 +157,7 @@ class FakeUnitOfWorkFactory:
             catalog_templates=self.catalog_templates,
             products=self.products,
             product_variants=self.product_variants,
+            product_input_images=self.product_input_images,
             tenant_id=tenant_id,
         )
 

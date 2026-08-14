@@ -58,6 +58,7 @@ from app.entities.category_spec_version import CategorySpecVersion, SpecVersionS
 from app.entities.identity import Identity
 from app.entities.image_slots import CatalogImageSlot, InputImageSlot
 from app.entities.product import Product, ProductStatus
+from app.entities.product_input_image import InputImageStatus, ProductInputImage
 from app.entities.product_variant import ProductVariant
 from app.entities.roles import Role
 from app.entities.session import Session
@@ -133,6 +134,14 @@ _template_status_type = Enum(
 _product_status_type = Enum(
     ProductStatus,
     name="product_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_input_image_status_type = Enum(
+    InputImageStatus,
+    name="product_input_image_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -437,6 +446,23 @@ product_variants_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+product_input_images_table = Table(
+    "product_input_images",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("product_id", Uuid(), nullable=False),
+    Column("variant_id", Uuid(), nullable=True),
+    Column("input_image_slot_id", Uuid(), nullable=False),
+    Column("asset_id", Uuid(), nullable=False),
+    Column("normalised_asset_id", Uuid(), nullable=True),
+    Column("status", _input_image_status_type, nullable=False),
+    Column("rejection_reason", Text(), nullable=True),
+    Column("created_by", Uuid(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -503,4 +529,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(CatalogTemplate, catalog_templates_table)
     mapper_registry.map_imperatively(Product, products_table)
     mapper_registry.map_imperatively(ProductVariant, product_variants_table)
+    mapper_registry.map_imperatively(ProductInputImage, product_input_images_table)
     _mapped = True

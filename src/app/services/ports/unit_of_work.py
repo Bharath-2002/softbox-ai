@@ -49,6 +49,7 @@ from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.input_image_slot_repository import InputImageSlotRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
+from app.services.ports.product_input_image_repository import ProductInputImageRepository
 from app.services.ports.product_repository import ProductRepository
 from app.services.ports.product_variant_repository import ProductVariantRepository
 from app.services.ports.session_repository import SessionRepository
@@ -120,6 +121,9 @@ class UnitOfWork(Protocol):
 
     @property
     def product_variants(self) -> ProductVariantRepository: ...
+
+    @property
+    def product_input_images(self) -> ProductInputImageRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""
