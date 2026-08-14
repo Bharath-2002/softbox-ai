@@ -27,6 +27,7 @@ from app.bootstrap.di import (
     CreateProductDep,
     CreateProductVariantDep,
     InputImageValidationAgentDep,
+    ListProductsDep,
     RecomputeProductReadinessDep,
 )
 from app.entities.capabilities import Capability
@@ -92,6 +93,28 @@ async def create_product(
         created_by=principal.user_id,
     )
     return ProductResponse.from_entity(product)
+
+
+class ProductPageResponse(BaseModel):
+    items: list[ProductResponse]
+    next_cursor: str | None
+
+
+@router.get("/products", response_model=ProductPageResponse, dependencies=_manage)
+async def list_products(
+    principal: PrincipalDep,
+    use_case: ListProductsDep,
+    category_id: CategoryId | None = None,
+    cursor: str | None = None,
+    limit: int = 20,
+) -> ProductPageResponse:
+    assert principal.tenant_id is not None
+    page = await use_case(
+        tenant_id=principal.tenant_id, category_id=category_id, cursor=cursor, limit=limit
+    )
+    return ProductPageResponse(
+        items=[ProductResponse.from_entity(p) for p in page.items], next_cursor=page.next_cursor
+    )
 
 
 @router.post(

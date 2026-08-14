@@ -29,6 +29,19 @@ class Cursor:
     id: UUID
 
 
+@dataclass(frozen=True)
+class Page[T]:
+    """A page of results plus the cursor to fetch the next one — ``None``
+    means this was the last page. A repository asked for ``limit`` rows
+    should be handed ``limit + 1`` by its caller so ``has_more`` can be
+    determined without a separate ``COUNT`` query; building the ``Page``
+    itself (trimming the extra row, encoding ``next_cursor`` from the last
+    *returned* row) is the use case's job, not this dataclass's."""
+
+    items: list[T]
+    next_cursor: str | None
+
+
 def encode_cursor(cursor: Cursor) -> str:
     payload = json.dumps({"k": cursor.sort_key, "id": str(cursor.id)}, separators=(",", ":"))
     return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")

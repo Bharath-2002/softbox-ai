@@ -225,6 +225,56 @@ async def test_creating_a_product_over_http_promotes_semantic_columns() -> None:
     assert body["status"] == "draft"
 
 
+async def test_listing_products_over_http_paginates() -> None:
+    app, uow_factory, _clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    category_id = new_category_id()
+    user_id = new_user_id()
+    spec_version = CategorySpecVersion.create(
+        tenant_id,
+        category_id,
+        version=1,
+        snapshot={
+            "attribute_definitions": [],
+            "variant_axes": [],
+            "input_image_slots": [],
+            "catalog_image_slots": [],
+        },
+        published_by=user_id,
+        now=_NOW,
+    )
+    await uow_factory.category_spec_versions.add(spec_version)
+    for _ in range(3):
+        product = Product.create(
+            tenant_id, category_id, spec_version.id, attributes={}, created_by=user_id, now=_NOW
+        )
+        await uow_factory.products.add(product)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        first = await http.get(
+            "/api/v1/admin/products",
+            params={"category_id": str(category_id), "limit": 2},
+            headers=headers,
+        )
+        second = await http.get(
+            "/api/v1/admin/products",
+            params={
+                "category_id": str(category_id),
+                "limit": 2,
+                "cursor": first.json()["next_cursor"],
+            },
+            headers=headers,
+        )
+
+    assert first.status_code == 200
+    assert len(first.json()["items"]) == 2
+    assert first.json()["next_cursor"] is not None
+    assert len(second.json()["items"]) == 1
+    assert second.json()["next_cursor"] is None
+
+
 async def test_creating_a_product_variant_over_http_validates_axis_values() -> None:
     app, uow_factory, _clock, codec, _storage = _build()
     tenant_id_str = str(new_tenant_id())
