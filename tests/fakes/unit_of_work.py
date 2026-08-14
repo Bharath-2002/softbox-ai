@@ -161,7 +161,7 @@ class FakeUnitOfWorkFactory:
         self.quota_reservations = InMemoryQuotaReservationRepository()
         self.generation_requests = InMemoryGenerationRequestRepository()
         self.generation_items = InMemoryGenerationItemRepository()
-        self.catalog_images = InMemoryCatalogImageRepository()
+        self.catalog_images = InMemoryCatalogImageRepository(self.product_variants)
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(

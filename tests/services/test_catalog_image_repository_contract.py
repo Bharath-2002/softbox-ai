@@ -15,7 +15,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.entities.catalog_image import CatalogImage
+from app.entities.catalog_image import CatalogImage, CatalogImageStatus
+from app.entities.product_variant import ProductVariant
 from app.infrastructure.persistence.catalog_image_repository import SqlCatalogImageRepository
 from app.infrastructure.persistence.database import create_engine, create_session_factory
 from app.services.ports.catalog_image_repository import CatalogImageRepository
@@ -25,6 +26,7 @@ from app.shared.ids import (
     CatalogImageId,
     CatalogImageSlotId,
     GenerationItemId,
+    ProductId,
     ProductVariantId,
     TenantId,
     new_asset_id,
@@ -40,7 +42,9 @@ from app.shared.ids import (
     new_tenant_id,
     new_user_id,
 )
+from app.shared.pagination import Cursor
 from tests.fakes.catalog_image_repository import InMemoryCatalogImageRepository
+from tests.fakes.product_variant_repository import InMemoryProductVariantRepository
 from tests.infrastructure.conftest import APP_URL, OWNER_URL
 
 pytestmark = pytest.mark.db
@@ -127,10 +131,18 @@ class Context:
     catalog_image_slot_id: CatalogImageSlotId
     asset_id: AssetId
     generation_item_id: GenerationItemId
+    product_id: ProductId
+    second_slot_id: CatalogImageSlotId
 
 
 async def _make_real_fixture() -> tuple[
-    TenantId, ProductVariantId, CatalogImageSlotId, AssetId, GenerationItemId
+    TenantId,
+    ProductVariantId,
+    CatalogImageSlotId,
+    AssetId,
+    GenerationItemId,
+    ProductId,
+    CatalogImageSlotId,
 ]:
     tenant_id = new_tenant_id()
     category_id = new_category_id()
@@ -139,6 +151,7 @@ async def _make_real_fixture() -> tuple[
     variant_id = new_product_variant_id()
     request_id = new_generation_request_id()
     slot_id = new_catalog_image_slot_id()
+    second_slot_id = new_catalog_image_slot_id()
     template_id = new_catalog_template_id()
     asset_id = new_asset_id()
     generation_item_id = new_generation_item_id()
@@ -211,6 +224,15 @@ async def _make_real_fixture() -> tuple[
         },
     )
     await session.execute(
+        _INSERT_CATALOG_IMAGE_SLOT,
+        {
+            "id": str(second_slot_id),
+            "tenant_id": str(tenant_id),
+            "category_id": str(category_id),
+            "key": "full_length",
+        },
+    )
+    await session.execute(
         _INSERT_CATALOG_TEMPLATE,
         {
             "id": str(template_id),
@@ -243,23 +265,40 @@ async def _make_real_fixture() -> tuple[
     await session.commit()
     await session.close()
     await engine.dispose()
-    return tenant_id, variant_id, slot_id, asset_id, generation_item_id
+    return tenant_id, variant_id, slot_id, asset_id, generation_item_id, product_id, second_slot_id
 
 
 @pytest_asyncio.fixture(params=["fake", "real"])
 async def ctx(request: pytest.FixtureRequest) -> AsyncIterator[Context]:
     if request.param == "fake":
+        product_variants = InMemoryProductVariantRepository()
+        tenant_id = new_tenant_id()
+        product_id = new_product_id()
+        variant = ProductVariant.create(
+            tenant_id, product_id, axis_values={}, created_by=new_user_id(), now=utcnow()
+        )
+        await product_variants.add(variant)
         yield Context(
-            InMemoryCatalogImageRepository(),
-            new_tenant_id(),
-            new_product_variant_id(),
+            InMemoryCatalogImageRepository(product_variants),
+            tenant_id,
+            variant.id,
             new_catalog_image_slot_id(),
             new_asset_id(),
             new_generation_item_id(),
+            product_id,
+            new_catalog_image_slot_id(),
         )
         return
 
-    tenant_id, variant_id, slot_id, asset_id, generation_item_id = await _make_real_fixture()
+    (
+        tenant_id,
+        variant_id,
+        slot_id,
+        asset_id,
+        generation_item_id,
+        product_id,
+        second_slot_id,
+    ) = await _make_real_fixture()
     engine = create_engine(APP_URL)
     session = create_session_factory(engine)()
     await session.begin()
@@ -272,6 +311,8 @@ async def ctx(request: pytest.FixtureRequest) -> AsyncIterator[Context]:
             slot_id,
             asset_id,
             generation_item_id,
+            product_id,
+            second_slot_id,
         )
     finally:
         await session.rollback()
@@ -284,6 +325,21 @@ def _image(ctx: Context) -> CatalogImage:
         ctx.tenant_id,
         ctx.variant_id,
         ctx.catalog_image_slot_id,
+        ctx.asset_id,
+        ctx.generation_item_id,
+        now=utcnow(),
+    )
+
+
+def _image_at_second_slot(ctx: Context) -> CatalogImage:
+    """A second, independently-live row for the same variant — a different
+    slot, so it never collides with `_image(ctx)`'s row under the partial
+    unique index (`UNIQUE (tenant_id, variant_id, catalog_image_slot_id)
+    WHERE superseded_by IS NULL`)."""
+    return CatalogImage.create(
+        ctx.tenant_id,
+        ctx.variant_id,
+        ctx.second_slot_id,
         ctx.asset_id,
         ctx.generation_item_id,
         now=utcnow(),
@@ -338,3 +394,75 @@ async def test_list_for_variant_returns_every_row_including_superseded(ctx: Cont
 
     assert [i.id for i in listed] == [image.id]
     assert listed[0].superseded_by is not None
+
+
+async def test_list_page_excludes_superseded_rows(ctx: Context) -> None:
+    superseded = _image(ctx)
+    await ctx.images.add(superseded)
+    live = _image(ctx)
+    # Update-before-insert, same order every regeneration transaction in
+    # this codebase uses (see `entities.catalog_image`'s module docstring)
+    # -- the reverse order would violate the partial unique index.
+    superseded.mark_superseded(by=live.id, now=utcnow())
+    await ctx.images.update(superseded)
+    await ctx.images.add(live)
+
+    page = await ctx.images.list_page(
+        ctx.tenant_id, status=None, product_id=None, after=None, limit=10
+    )
+
+    assert [i.id for i in page] == [live.id]
+
+
+async def test_list_page_filters_by_status(ctx: Context) -> None:
+    pending = _image(ctx)
+    await ctx.images.add(pending)
+    approved = _image_at_second_slot(ctx)
+    approved.mark_qc_passed(qc_result={}, now=utcnow())
+    approved.approve(approved_by=None, now=utcnow())
+    await ctx.images.add(approved)
+
+    page = await ctx.images.list_page(
+        ctx.tenant_id,
+        status=CatalogImageStatus.PENDING_QC,
+        product_id=None,
+        after=None,
+        limit=10,
+    )
+
+    assert [i.id for i in page] == [pending.id]
+
+
+async def test_list_page_filters_by_product(ctx: Context) -> None:
+    image = _image(ctx)
+    await ctx.images.add(image)
+
+    matching = await ctx.images.list_page(
+        ctx.tenant_id, status=None, product_id=ctx.product_id, after=None, limit=10
+    )
+    other_product = await ctx.images.list_page(
+        ctx.tenant_id, status=None, product_id=new_product_id(), after=None, limit=10
+    )
+
+    assert [i.id for i in matching] == [image.id]
+    assert other_product == []
+
+
+async def test_list_page_paginates_with_a_cursor(ctx: Context) -> None:
+    first = _image(ctx)
+    await ctx.images.add(first)
+    second = _image_at_second_slot(ctx)
+    await ctx.images.add(second)
+
+    first_page = await ctx.images.list_page(
+        ctx.tenant_id, status=None, product_id=None, after=None, limit=1
+    )
+    assert len(first_page) == 1
+
+    cursor = Cursor(sort_key=first_page[0].created_at.isoformat(), id=first_page[0].id)
+    second_page = await ctx.images.list_page(
+        ctx.tenant_id, status=None, product_id=None, after=cursor, limit=1
+    )
+
+    all_ids = {i.id for i in first_page} | {i.id for i in second_page}
+    assert all_ids == {first.id, second.id}

@@ -5,14 +5,32 @@ because this row is revised over its QC/approval lifecycle and, critically,
 transaction. `get_live` finds that existing row — the one with
 `superseded_by IS NULL` for a given (variant, slot), i.e. the row the
 partial unique index currently protects.
+
+`list_page` (M6) is the approval queue's discovery query, cursor-paginated
+(CLAUDE.md §9) the same way `ProductRepository.list_page` is — ordered
+`(created_at, id)` ascending, no trimming/cursor-encoding of its own. It
+**always** excludes superseded rows (`superseded_by IS NOT NULL`):
+regeneration can supersede a `pending_approval` image before anyone ever
+acts on it (a new "Save & Generate" doesn't wait on an old one's approval
+state), and a superseded row is no longer anything a human should be
+approving or rejecting — there is no caller anywhere that wants to see
+those, so this is not a filter parameter, it is the query's own definition
+of "queue."
 """
 
 from __future__ import annotations
 
 from typing import Protocol
 
-from app.entities.catalog_image import CatalogImage
-from app.shared.ids import CatalogImageId, CatalogImageSlotId, ProductVariantId, TenantId
+from app.entities.catalog_image import CatalogImage, CatalogImageStatus
+from app.shared.ids import (
+    CatalogImageId,
+    CatalogImageSlotId,
+    ProductId,
+    ProductVariantId,
+    TenantId,
+)
+from app.shared.pagination import Cursor
 
 
 class CatalogImageRepository(Protocol):
@@ -35,3 +53,18 @@ class CatalogImageRepository(Protocol):
     async def list_for_variant(
         self, tenant_id: TenantId, variant_id: ProductVariantId
     ) -> list[CatalogImage]: ...
+
+    async def list_page(
+        self,
+        tenant_id: TenantId,
+        *,
+        status: CatalogImageStatus | None,
+        product_id: ProductId | None,
+        after: Cursor | None,
+        limit: int,
+    ) -> list[CatalogImage]:
+        """Live (non-superseded) images, optionally filtered to one status
+        and/or one product (joining through `product_variants`).
+        `status=None` lists every live status — used for a product's "all
+        images" bulk-approve view, not the ordinary queue."""
+        ...
