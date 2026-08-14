@@ -19,6 +19,7 @@ dependencies = [
     # just a test one, now that infrastructure/auth uses it.
     "httpx>=0.28",
     "aiosmtplib>=3.0",
+    "pillow>=12.3.0",
 ]
 
 [dependency-groups]
