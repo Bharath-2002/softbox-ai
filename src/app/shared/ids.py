@@ -29,6 +29,7 @@ ProductId = NewType("ProductId", uuid.UUID)
 ProductVariantId = NewType("ProductVariantId", uuid.UUID)
 ProductInputImageId = NewType("ProductInputImageId", uuid.UUID)
 GenerationRequestId = NewType("GenerationRequestId", uuid.UUID)
+GenerationItemId = NewType("GenerationItemId", uuid.UUID)
 
 
 def new_tenant_id() -> TenantId:
@@ -105,3 +106,7 @@ def new_product_input_image_id() -> ProductInputImageId:
 
 def new_generation_request_id() -> GenerationRequestId:
     return GenerationRequestId(uuid.uuid4())
+
+
+def new_generation_item_id() -> GenerationItemId:
+    return GenerationItemId(uuid.uuid4())

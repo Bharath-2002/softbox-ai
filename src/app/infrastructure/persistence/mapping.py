@@ -46,7 +46,7 @@ from sqlalchemy import (
     Text,
     Uuid,
 )
-from sqlalchemy.dialects.postgresql import INET, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, INET, JSONB
 from sqlalchemy.orm import registry
 
 from app.entities.asset import Asset, AssetKind
@@ -55,6 +55,7 @@ from app.entities.catalog_slot_input_requirement import CatalogSlotInputRequirem
 from app.entities.catalog_template import CatalogTemplate, TemplateKind, TemplateStatus
 from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion, SpecVersionStatus
+from app.entities.generation_item import GenerationItem, GenerationItemStatus
 from app.entities.generation_request import GenerationRequest, GenerationRequestStatus
 from app.entities.identity import Identity
 from app.entities.image_slots import CatalogImageSlot, InputImageSlot
@@ -151,6 +152,14 @@ _input_image_status_type = Enum(
 _generation_request_status_type = Enum(
     GenerationRequestStatus,
     name="generation_request_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_generation_item_status_type = Enum(
+    GenerationItemStatus,
+    name="generation_item_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -505,6 +514,31 @@ generation_requests_table = Table(
     Column("completed_at", DateTime(timezone=True), nullable=True),
 )
 
+generation_items_table = Table(
+    "generation_items",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("request_id", Uuid(), nullable=False),
+    Column("catalog_image_slot_id", Uuid(), nullable=False),
+    Column("template_id", Uuid(), nullable=False),
+    Column("attempt_no", Integer(), nullable=False),
+    Column("status", _generation_item_status_type, nullable=False),
+    Column("provider", Text(), nullable=False),
+    Column("model", Text(), nullable=False),
+    Column("model_params", JSONB(), nullable=False),
+    Column("seed", BigInteger(), nullable=False),
+    Column("prompt_rendered", Text(), nullable=False),
+    Column("prompt_version", Text(), nullable=False),
+    Column("input_asset_ids", ARRAY(Uuid()), nullable=False),
+    Column("output_asset_id", Uuid(), nullable=True),
+    Column("cost_micros", BigInteger(), nullable=True),
+    Column("latency_ms", Integer(), nullable=True),
+    Column("error_code", Text(), nullable=True),
+    Column("error_detail", Text(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -623,4 +657,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(ProductVariant, product_variants_table)
     mapper_registry.map_imperatively(ProductInputImage, product_input_images_table)
     mapper_registry.map_imperatively(GenerationRequest, generation_requests_table)
+    mapper_registry.map_imperatively(GenerationItem, generation_items_table)
     _mapped = True

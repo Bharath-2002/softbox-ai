@@ -43,6 +43,9 @@ from app.infrastructure.persistence.category_repository import SqlCategoryReposi
 from app.infrastructure.persistence.category_spec_version_repository import (
     SqlCategorySpecVersionRepository,
 )
+from app.infrastructure.persistence.generation_item_repository import (
+    SqlGenerationItemRepository,
+)
 from app.infrastructure.persistence.generation_request_repository import (
     SqlGenerationRequestRepository,
 )
@@ -86,6 +89,7 @@ from app.services.ports.catalog_slot_input_requirement_repository import (
 from app.services.ports.catalog_template_repository import CatalogTemplateRepository
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.category_spec_version_repository import CategorySpecVersionRepository
+from app.services.ports.generation_item_repository import GenerationItemRepository
 from app.services.ports.generation_request_repository import GenerationRequestRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
@@ -153,6 +157,7 @@ class SqlUnitOfWork:
         self._tenants: SqlTenantRepository | None = None
         self._quota_reservations: SqlQuotaReservationRepository | None = None
         self._generation_requests: SqlGenerationRequestRepository | None = None
+        self._generation_items: SqlGenerationItemRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -320,6 +325,12 @@ class SqlUnitOfWork:
             self._generation_requests = SqlGenerationRequestRepository(self.session)
         return self._generation_requests
 
+    @property
+    def generation_items(self) -> GenerationItemRepository:
+        if self._generation_items is None:
+            self._generation_items = SqlGenerationItemRepository(self.session)
+        return self._generation_items
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -373,6 +384,7 @@ class SqlUnitOfWork:
             self._tenants = None
             self._quota_reservations = None
             self._generation_requests = None
+            self._generation_items = None
 
 
 def make_unit_of_work_factory(
