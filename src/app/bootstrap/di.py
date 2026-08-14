@@ -34,6 +34,7 @@ from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
 from app.features.identity.start_impersonation import StartImpersonation
 from app.features.products.complete_input_image_validation import CompleteInputImageValidation
+from app.features.products.create_product import CreateProduct
 from app.features.products.recompute_product_readiness import RecomputeProductReadiness
 from app.features.products.start_input_image_validation import StartInputImageValidation
 from app.features.settings.resolve_setting import ResolveSetting
@@ -337,6 +338,10 @@ def get_recompute_product_readiness(
     return RecomputeProductReadiness(uow_factory, clock)
 
 
+def get_create_product(uow_factory: UowFactoryDep, clock: ClockDep) -> CreateProduct:
+    return CreateProduct(uow_factory, clock)
+
+
 def get_start_input_image_validation(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> StartInputImageValidation:
@@ -450,6 +455,7 @@ SeedStockPresetsDep = Annotated[SeedStockPresets, Depends(get_seed_stock_presets
 RecomputeProductReadinessDep = Annotated[
     RecomputeProductReadiness, Depends(get_recompute_product_readiness)
 ]
+CreateProductDep = Annotated[CreateProduct, Depends(get_create_product)]
 InputImageValidationAgentDep = Annotated[
     InputImageValidationAgent, Depends(get_input_image_validation_agent)
 ]

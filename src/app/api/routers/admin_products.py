@@ -22,7 +22,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.api.deps.authorization import PrincipalDep, require_capability
-from app.bootstrap.di import InputImageValidationAgentDep, RecomputeProductReadinessDep
+from app.bootstrap.di import (
+    CreateProductDep,
+    InputImageValidationAgentDep,
+    RecomputeProductReadinessDep,
+)
 from app.entities.capabilities import Capability
 from app.entities.product import Product
 from app.entities.product_input_image import ProductInputImage
@@ -63,6 +67,25 @@ class ProductResponse(BaseModel):
             status=p.status.value,
             updated_at=p.updated_at,
         )
+
+
+class CreateProductRequest(BaseModel):
+    category_id: CategoryId
+    attributes: dict[str, Any]
+
+
+@router.post("/products", response_model=ProductResponse, status_code=201, dependencies=_manage)
+async def create_product(
+    body: CreateProductRequest, principal: PrincipalDep, use_case: CreateProductDep
+) -> ProductResponse:
+    assert principal.tenant_id is not None
+    product = await use_case(
+        tenant_id=principal.tenant_id,
+        category_id=body.category_id,
+        attributes=body.attributes,
+        created_by=principal.user_id,
+    )
+    return ProductResponse.from_entity(product)
 
 
 @router.post(
