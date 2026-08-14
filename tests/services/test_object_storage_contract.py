@@ -116,6 +116,32 @@ async def test_accept_upload_writes_bytes_and_returns_the_sealed_claims(ctx: Con
     assert await ctx.storage.read(key) == b"raw-bytes"
 
 
+async def test_peek_upload_returns_claims_and_cap_without_writing_anything(ctx: Context) -> None:
+    tenant_id = new_tenant_id()
+    uploader = new_user_id()
+    key = ctx.storage.new_storage_key(tenant_id, kind="input", extension="jpg")
+    now = utcnow()
+    upload = await ctx.storage.presign_put(
+        tenant_id=tenant_id,
+        storage_key=key,
+        kind="input",
+        uploaded_by=uploader,
+        content_type="image/jpeg",
+        max_bytes=1_234,
+        now=now,
+        expires_in=timedelta(minutes=10),
+    )
+    token = upload.url.rsplit("/", 1)[-1]
+
+    claims, max_bytes = await ctx.storage.peek_upload(token, now=now)
+
+    assert claims.tenant_id == tenant_id
+    assert claims.storage_key == key
+    assert max_bytes == 1_234
+    with pytest.raises(NotFoundError):
+        await ctx.storage.read(key)
+
+
 async def test_accept_upload_rejects_bytes_over_the_declared_cap(ctx: Context) -> None:
     tenant_id = new_tenant_id()
     key = ctx.storage.new_storage_key(tenant_id, kind="input", extension="jpg")

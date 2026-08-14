@@ -73,6 +73,12 @@ class InMemoryObjectStorage:
         )
         return f"https://fake-object-storage.test/{token}"
 
+    async def peek_upload(self, token: str, *, now: datetime) -> tuple[UploadClaims, int]:
+        pending = self._pending_puts.get(token)
+        if pending is None or now > pending.expires_at:
+            raise ValidationError("Invalid or expired upload token.")
+        return pending.claims, pending.max_bytes
+
     async def accept_upload(self, token: str, data: bytes, *, now: datetime) -> UploadClaims:
         pending = self._pending_puts.get(token)
         if pending is None or now > pending.expires_at:

@@ -137,7 +137,36 @@ async def test_an_invalid_upload_token_is_rejected() -> None:
             "/api/v1/webhooks/uploads/not-a-real-token", content=_jpeg_bytes()
         )
 
+    # Asserting the domain error code, not just the status - a bare 422 would
+    # pass just as happily on FastAPI's own path-param validation, which
+    # would prove nothing about `peek_upload` actually running.
     assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+async def test_an_upload_larger_than_its_declared_cap_is_rejected() -> None:
+    app, _uow_factory, _clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["template.manage"]
+    )
+
+    async with await _client(app) as http:
+        request_response = await http.post(
+            "/api/v1/admin/assets/uploads",
+            json={"kind": "input", "extension": "jpg", "content_type": "image/jpeg"},
+            headers=headers,
+        )
+        token = request_response.json()["url"].rsplit("/", 1)[-1]
+
+        put_response = await http.put(
+            f"/api/v1/webhooks/uploads/{token}",
+            content=b"x" * 25_000_000,
+            headers={"Content-Type": "image/jpeg"},
+        )
+
+    assert put_response.status_code == 422
+    assert put_response.json()["code"] == "validation_error"
 
 
 async def test_requesting_a_generated_kind_upload_is_rejected() -> None:

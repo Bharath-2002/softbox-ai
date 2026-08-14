@@ -146,17 +146,25 @@ class LocalObjectStorage:
         )
         return f"{self._base_url}/api/v1/webhooks/uploads/{token}"
 
+    async def peek_upload(self, token: str, *, now: datetime) -> tuple[UploadClaims, int]:
+        claims = self._tokens.decode(token, purpose="put", now=now)
+        return self._claims_from(claims), int(claims.get("max_bytes", 0))
+
     async def accept_upload(self, token: str, data: bytes, *, now: datetime) -> UploadClaims:
         claims = self._tokens.decode(token, purpose="put", now=now)
         max_bytes = claims.get("max_bytes")
         if max_bytes is not None and len(data) > max_bytes:
             raise ValidationError("Upload exceeds the size declared when it was requested.")
 
-        storage_key = str(claims["storage_key"])
-        await self.write(storage_key, data)
+        upload_claims = self._claims_from(claims)
+        await self.write(upload_claims.storage_key, data)
+        return upload_claims
+
+    @staticmethod
+    def _claims_from(claims: dict[str, Any]) -> UploadClaims:
         return UploadClaims(
             tenant_id=TenantId(UUID(str(claims["tenant_id"]))),
-            storage_key=storage_key,
+            storage_key=str(claims["storage_key"]),
             kind=str(claims["kind"]),
             uploaded_by=UserId(UUID(str(claims["uploaded_by"]))),
         )

@@ -82,6 +82,14 @@ class ObjectStorage(Protocol):
         self, storage_key: str, *, now: datetime, expires_in: timedelta
     ) -> str: ...
 
+    async def peek_upload(self, token: str, *, now: datetime) -> tuple[UploadClaims, int]:
+        """Validates the token and returns its claims plus the size cap it
+        declared — without touching any bytes. Lets a route bound how much
+        of an unauthenticated request body it will ever read *before*
+        reading any of it, rather than learning the cap only after buffering
+        the whole thing (what a bare ``accept_upload`` call would do)."""
+        ...
+
     async def accept_upload(self, token: str, data: bytes, *, now: datetime) -> UploadClaims: ...
 
     async def resolve_download(self, token: str, *, now: datetime) -> bytes: ...

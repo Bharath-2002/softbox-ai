@@ -35,6 +35,7 @@ SQLAlchemy does not support re-mapping a class.
 from __future__ import annotations
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -341,7 +342,7 @@ assets_table = Table(
     Column("mime", Text(), nullable=False),
     Column("width", Integer(), nullable=False),
     Column("height", Integer(), nullable=False),
-    Column("bytes", Integer(), nullable=False),
+    Column("bytes", BigInteger(), nullable=False),
     Column("kind", _asset_kind_type, nullable=False),
     Column("source", Text(), nullable=False),
     Column("parent_asset_id", Uuid(), nullable=True),
