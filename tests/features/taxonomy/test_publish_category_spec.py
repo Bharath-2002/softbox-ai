@@ -12,6 +12,7 @@ import pytest
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition
 from app.entities.category import Category
 from app.features.taxonomy.publish_category_spec import PublishCategorySpec
+from app.services.spec_resolver import SpecResolver
 from app.shared.errors import NotFoundError, ValidationError
 from app.shared.ids import new_category_id, new_tenant_id, new_user_id
 from tests.fakes.clock import FakeClock
@@ -113,6 +114,50 @@ async def test_republishing_only_stamps_newly_added_rows() -> None:
     published_category = await uow_factory.categories.get(tenant_id, category.id)
     assert published_category is not None
     assert published_category.current_spec_version == 2
+
+
+async def test_a_pinned_version_still_resolves_unchanged_after_a_later_publish() -> None:
+    """Gate — M2: 'a product pinned to spec version N still resolves
+    correctly after version N+1 is published.' No `products` table exists
+    yet (M4), so this pins the spec-side half directly: `SpecResolver`
+    reading version 1 must return exactly what it captured, unaffected by
+    version 2 adding a new field."""
+    use_case, clock, uow_factory = _use_case()
+    tenant_id = new_tenant_id()
+    actor_id = new_user_id()
+    category = Category.create(
+        tenant_id, key="apparel", name="Apparel", slug="apparel", parent=None, now=clock.now()
+    )
+    fabric = AttributeDefinition.create(
+        tenant_id,
+        category.id,
+        key="fabric",
+        label="Fabric",
+        data_type=AttributeDataType.TEXT,
+        now=clock.now(),
+    )
+    await uow_factory.categories.add(category)
+    await uow_factory.attribute_definitions.add(fabric)
+    first_version = await use_case(
+        tenant_id=tenant_id, category_id=category.id, actor_user_id=actor_id
+    )
+
+    care = AttributeDefinition.create(
+        tenant_id,
+        category.id,
+        key="care_instructions",
+        label="Care instructions",
+        data_type=AttributeDataType.TEXT,
+        now=clock.now(),
+    )
+    await uow_factory.attribute_definitions.add(care)
+    await use_case(tenant_id=tenant_id, category_id=category.id, actor_user_id=actor_id)
+
+    resolver = SpecResolver(uow_factory.category_spec_versions)
+    resolved_v1 = await resolver.resolve_published(tenant_id, category.id, 1)
+
+    assert resolved_v1 == first_version.snapshot
+    assert [d["key"] for d in resolved_v1["attribute_definitions"]] == ["fabric"]
 
 
 async def test_first_publish_change_summary_lists_every_row_as_added() -> None:

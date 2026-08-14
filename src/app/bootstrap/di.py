@@ -25,20 +25,36 @@ from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
 from app.features.identity.start_impersonation import StartImpersonation
+from app.features.settings.resolve_setting import ResolveSetting
+from app.features.settings.upsert_setting import UpsertSetting
+from app.features.taxonomy.attach_input_to_catalog_slot import AttachInputToCatalogSlot
 from app.features.taxonomy.create_attribute_definition import CreateAttributeDefinition
+from app.features.taxonomy.create_catalog_image_slot import CreateCatalogImageSlot
 from app.features.taxonomy.create_category import CreateCategory
+from app.features.taxonomy.create_input_image_slot import CreateInputImageSlot
 from app.features.taxonomy.create_variant_axis import CreateVariantAxis
 from app.features.taxonomy.create_variant_axis_value import CreateVariantAxisValue
+from app.features.taxonomy.detach_input_from_catalog_slot import DetachInputFromCatalogSlot
 from app.features.taxonomy.get_category import GetCategory
 from app.features.taxonomy.get_published_category_spec import GetPublishedCategorySpec
 from app.features.taxonomy.list_attribute_definitions import ListAttributeDefinitions
+from app.features.taxonomy.list_catalog_image_slots import ListCatalogImageSlots
+from app.features.taxonomy.list_catalog_slot_input_requirements import (
+    ListCatalogSlotInputRequirements,
+)
 from app.features.taxonomy.list_category_children import ListCategoryChildren
+from app.features.taxonomy.list_input_image_slots import ListInputImageSlots
 from app.features.taxonomy.list_variant_axes import ListVariantAxes
 from app.features.taxonomy.list_variant_axis_values import ListVariantAxisValues
 from app.features.taxonomy.move_category import MoveCategory
 from app.features.taxonomy.publish_category_spec import PublishCategorySpec
 from app.features.taxonomy.update_attribute_definition import UpdateAttributeDefinition
+from app.features.taxonomy.update_catalog_image_slot import UpdateCatalogImageSlot
+from app.features.taxonomy.update_catalog_slot_input_requirement import (
+    UpdateCatalogSlotInputRequirement,
+)
 from app.features.taxonomy.update_category import UpdateCategory
+from app.features.taxonomy.update_input_image_slot import UpdateInputImageSlot
 from app.features.taxonomy.update_variant_axis import UpdateVariantAxis
 from app.features.taxonomy.update_variant_axis_value import UpdateVariantAxisValue
 from app.services.ports.identity_provider import IdentityProvider
@@ -180,6 +196,70 @@ def get_list_variant_axis_values(uow_factory: UowFactoryDep) -> ListVariantAxisV
     return ListVariantAxisValues(uow_factory)
 
 
+def get_create_input_image_slot(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CreateInputImageSlot:
+    return CreateInputImageSlot(uow_factory, clock)
+
+
+def get_update_input_image_slot(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> UpdateInputImageSlot:
+    return UpdateInputImageSlot(uow_factory, clock)
+
+
+def get_list_input_image_slots(uow_factory: UowFactoryDep) -> ListInputImageSlots:
+    return ListInputImageSlots(uow_factory)
+
+
+def get_create_catalog_image_slot(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CreateCatalogImageSlot:
+    return CreateCatalogImageSlot(uow_factory, clock)
+
+
+def get_update_catalog_image_slot(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> UpdateCatalogImageSlot:
+    return UpdateCatalogImageSlot(uow_factory, clock)
+
+
+def get_list_catalog_image_slots(uow_factory: UowFactoryDep) -> ListCatalogImageSlots:
+    return ListCatalogImageSlots(uow_factory)
+
+
+def get_attach_input_to_catalog_slot(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> AttachInputToCatalogSlot:
+    return AttachInputToCatalogSlot(uow_factory, clock)
+
+
+def get_update_catalog_slot_input_requirement(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> UpdateCatalogSlotInputRequirement:
+    return UpdateCatalogSlotInputRequirement(uow_factory, clock)
+
+
+def get_detach_input_from_catalog_slot(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> DetachInputFromCatalogSlot:
+    return DetachInputFromCatalogSlot(uow_factory, clock)
+
+
+def get_list_catalog_slot_input_requirements(
+    uow_factory: UowFactoryDep,
+) -> ListCatalogSlotInputRequirements:
+    return ListCatalogSlotInputRequirements(uow_factory)
+
+
+def get_upsert_setting(uow_factory: UowFactoryDep, clock: ClockDep) -> UpsertSetting:
+    return UpsertSetting(uow_factory, clock)
+
+
+def get_resolve_setting(uow_factory: UowFactoryDep) -> ResolveSetting:
+    return ResolveSetting(uow_factory)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -208,3 +288,27 @@ UpdateVariantAxisValueDep = Annotated[
     UpdateVariantAxisValue, Depends(get_update_variant_axis_value)
 ]
 ListVariantAxisValuesDep = Annotated[ListVariantAxisValues, Depends(get_list_variant_axis_values)]
+CreateInputImageSlotDep = Annotated[CreateInputImageSlot, Depends(get_create_input_image_slot)]
+UpdateInputImageSlotDep = Annotated[UpdateInputImageSlot, Depends(get_update_input_image_slot)]
+ListInputImageSlotsDep = Annotated[ListInputImageSlots, Depends(get_list_input_image_slots)]
+CreateCatalogImageSlotDep = Annotated[
+    CreateCatalogImageSlot, Depends(get_create_catalog_image_slot)
+]
+UpdateCatalogImageSlotDep = Annotated[
+    UpdateCatalogImageSlot, Depends(get_update_catalog_image_slot)
+]
+ListCatalogImageSlotsDep = Annotated[ListCatalogImageSlots, Depends(get_list_catalog_image_slots)]
+AttachInputToCatalogSlotDep = Annotated[
+    AttachInputToCatalogSlot, Depends(get_attach_input_to_catalog_slot)
+]
+UpdateCatalogSlotInputRequirementDep = Annotated[
+    UpdateCatalogSlotInputRequirement, Depends(get_update_catalog_slot_input_requirement)
+]
+DetachInputFromCatalogSlotDep = Annotated[
+    DetachInputFromCatalogSlot, Depends(get_detach_input_from_catalog_slot)
+]
+ListCatalogSlotInputRequirementsDep = Annotated[
+    ListCatalogSlotInputRequirements, Depends(get_list_catalog_slot_input_requirements)
+]
+UpsertSettingDep = Annotated[UpsertSetting, Depends(get_upsert_setting)]
+ResolveSettingDep = Annotated[ResolveSetting, Depends(get_resolve_setting)]

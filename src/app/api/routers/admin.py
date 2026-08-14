@@ -12,8 +12,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.api.deps.authorization import require_tenant_context
-from app.api.routers import admin_attributes, admin_taxonomy
+from app.api.routers import admin_attributes, admin_image_slots, admin_settings, admin_taxonomy
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_tenant_context)])
 router.include_router(admin_taxonomy.router)
 router.include_router(admin_attributes.router)
+router.include_router(admin_image_slots.router)
+router.include_router(admin_settings.router)
