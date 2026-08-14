@@ -38,6 +38,7 @@ from app.features.products.complete_input_image_validation import CompleteInputI
 from app.features.products.create_generation_request import CreateGenerationRequest
 from app.features.products.create_product import CreateProduct
 from app.features.products.create_product_variant import CreateProductVariant
+from app.features.products.fan_out_generation_items import FanOutGenerationItems
 from app.features.products.list_products import ListProducts
 from app.features.products.recompute_product_readiness import RecomputeProductReadiness
 from app.features.products.start_input_image_validation import StartInputImageValidation
@@ -366,6 +367,18 @@ def get_create_generation_request(
     return CreateGenerationRequest(uow_factory, clock)
 
 
+def get_fan_out_generation_items(
+    request: Request, uow_factory: UowFactoryDep, clock: ClockDep
+) -> FanOutGenerationItems:
+    settings = request.app.state.settings
+    return FanOutGenerationItems(
+        uow_factory,
+        clock,
+        provider=settings.generation_provider,
+        model=settings.generation_model,
+    )
+
+
 def get_start_input_image_validation(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> StartInputImageValidation:
@@ -488,6 +501,7 @@ ListProductsDep = Annotated[ListProducts, Depends(get_list_products)]
 CreateGenerationRequestDep = Annotated[
     CreateGenerationRequest, Depends(get_create_generation_request)
 ]
+FanOutGenerationItemsDep = Annotated[FanOutGenerationItems, Depends(get_fan_out_generation_items)]
 InputImageValidationAgentDep = Annotated[
     InputImageValidationAgent, Depends(get_input_image_validation_agent)
 ]

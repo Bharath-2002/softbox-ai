@@ -27,6 +27,7 @@ from app.bootstrap.di import (
     CreateGenerationRequestDep,
     CreateProductDep,
     CreateProductVariantDep,
+    FanOutGenerationItemsDep,
     InputImageValidationAgentDep,
     ListProductsDep,
     RecomputeProductReadinessDep,
@@ -40,6 +41,7 @@ from app.shared.ids import (
     AssetId,
     CategoryId,
     CategorySpecVersionId,
+    GenerationItemId,
     GenerationRequestId,
     InputImageSlotId,
     ProductId,
@@ -294,3 +296,24 @@ async def create_generation_request(
         requested_by=principal.user_id,
     )
     return GenerationRequestResponse.from_entity(request)
+
+
+class FanOutResponse(BaseModel):
+    item_ids: list[GenerationItemId]
+
+
+@router.post(
+    "/generation-requests/{generation_request_id}/fan-out",
+    response_model=FanOutResponse,
+    dependencies=_manage,
+)
+async def fan_out_generation_items(
+    generation_request_id: GenerationRequestId,
+    principal: PrincipalDep,
+    use_case: FanOutGenerationItemsDep,
+) -> FanOutResponse:
+    assert principal.tenant_id is not None
+    items = await use_case(
+        tenant_id=principal.tenant_id, generation_request_id=generation_request_id
+    )
+    return FanOutResponse(item_ids=[item.id for item in items])

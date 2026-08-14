@@ -5,13 +5,13 @@ snapshot the request was generated against, the same D15 discipline as
 `Product`/`ProductVariant` — a later spec change must never retroactively
 alter what an in-flight or historical request meant.
 
-Only `create()` lands in this chunk. `GenerationRequestStatus` names every
-state the D19 state diagram describes (`queued -> running -> succeeded /
-partially_failed / failed`, plus `cancelled`), matching the migration's
-`CHECK` constraint, but the transition methods themselves are not built
-here — nothing drives `running`/`succeeded`/`partially_failed`/`failed` yet,
-since the worker that executes `generation_items` and the reconciler that
-sweeps stuck runs are both still ahead in the M5 sequence. Same posture
+`create()` and `mark_running()` land in this chunk — `mark_running` is
+driven by `FanOutGenerationItems`, which moves a request out of `queued`
+once it has finished expanding it into `generation_items` and enqueueing
+their render jobs, i.e. once real work is actually in flight. The rest of
+`GenerationRequestStatus` (`succeeded`/`partially_failed`/`failed`/
+`cancelled`) still has no caller — those are the worker's and the
+reconciler's job, both still ahead in the M5 sequence. Same posture
 `entities.product` documents for its own not-yet-driven states.
 """
 
@@ -23,6 +23,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
+from app.shared.errors import ValidationError
 from app.shared.ids import (
     CategorySpecVersionId,
     GenerationRequestId,
@@ -82,3 +83,8 @@ class GenerationRequest:
             created_at=now,
             completed_at=None,
         )
+
+    def mark_running(self, *, now: datetime) -> None:
+        if self.status != GenerationRequestStatus.QUEUED:
+            raise ValidationError(f"Cannot start running from status {self.status.value!r}.")
+        self.status = GenerationRequestStatus.RUNNING

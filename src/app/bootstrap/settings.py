@@ -97,6 +97,18 @@ class Settings(BaseSettings):
         default=SecretStr("dev-only-object-storage-signing-key-not-for-production-use"),
     )
 
+    # ── Generation (D18) ─────────────────────────────────────────────────────
+    # The model id is pinned here, not in code, per D18's own rationale - so
+    # swapping providers or model versions is a config change, not a release.
+    # No real `ImageGeneration` adapter exists yet (no image-generation
+    # provider credentials are configured anywhere in this repo), same
+    # deferred-adapter posture as `VisionAnalysis`/real `ObjectStorage` - these
+    # two values are read by `FanOutGenerationItems` to stamp onto each
+    # `generation_item` regardless, since which provider/model an attempt
+    # *targets* is decided before the call, not a fact only the adapter knows.
+    generation_provider: str = "nano-banana"
+    generation_model: str = "nano-banana-2"
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def is_production(self) -> bool:

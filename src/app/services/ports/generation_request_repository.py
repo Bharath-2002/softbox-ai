@@ -1,7 +1,7 @@
-"""Port for `generation_requests` (D18). `get`/`add` only, matching
-`ProductInputImageRepository`'s shape — the transitions that would justify
-an `update` beyond a plain flush land with the worker/reconciler chunks
-that actually drive them.
+"""Port for `generation_requests` (D18). `update` exists alongside
+`get`/`add` now that `FanOutGenerationItems` drives the first real status
+transition (`mark_running`) — the same "add the mutation exactly when a
+real caller needs it" discipline `CatalogImageRepository` followed.
 """
 
 from __future__ import annotations
@@ -18,3 +18,5 @@ class GenerationRequestRepository(Protocol):
     ) -> GenerationRequest | None: ...
 
     async def add(self, request: GenerationRequest) -> None: ...
+
+    async def update(self, request: GenerationRequest) -> None: ...

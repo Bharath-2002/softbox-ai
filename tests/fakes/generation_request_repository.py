@@ -15,3 +15,6 @@ class InMemoryGenerationRequestRepository:
 
     async def add(self, request: GenerationRequest) -> None:
         self._rows[(request.tenant_id, request.id)] = request
+
+    async def update(self, request: GenerationRequest) -> None:
+        self._rows[(request.tenant_id, request.id)] = request

@@ -28,3 +28,6 @@ class SqlGenerationRequestRepository:
     async def add(self, request: GenerationRequest) -> None:
         self._session.add(request)
         await self._session.flush()
+
+    async def update(self, request: GenerationRequest) -> None:
+        await self._session.flush()
