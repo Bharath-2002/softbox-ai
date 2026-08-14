@@ -25,6 +25,7 @@ from app.api.deps.authorization import get_token_issuer
 from app.api.deps.content_moderation import get_content_moderation_scanner
 from app.api.deps.object_storage import get_object_storage
 from app.api.deps.vision_analysis import get_vision_analysis
+from app.features.assets.request_download import RequestDownload
 from app.features.assets.request_upload import RequestUpload
 from app.features.assets.verify_and_register_upload import VerifyAndRegisterUpload
 from app.features.identity.complete_login import CompleteLogin
@@ -283,6 +284,14 @@ def get_request_upload(
     return RequestUpload(object_storage, clock)
 
 
+def get_request_download(
+    uow_factory: UowFactoryDep,
+    object_storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+    clock: ClockDep,
+) -> RequestDownload:
+    return RequestDownload(uow_factory, object_storage, clock)
+
+
 def get_verify_and_register_upload(
     uow_factory: UowFactoryDep,
     object_storage: Annotated[ObjectStorage, Depends(get_object_storage)],
@@ -397,6 +406,7 @@ ListCatalogSlotInputRequirementsDep = Annotated[
 UpsertSettingDep = Annotated[UpsertSetting, Depends(get_upsert_setting)]
 ResolveSettingDep = Annotated[ResolveSetting, Depends(get_resolve_setting)]
 RequestUploadDep = Annotated[RequestUpload, Depends(get_request_upload)]
+RequestDownloadDep = Annotated[RequestDownload, Depends(get_request_download)]
 VerifyAndRegisterUploadDep = Annotated[
     VerifyAndRegisterUpload, Depends(get_verify_and_register_upload)
 ]

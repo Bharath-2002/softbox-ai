@@ -34,6 +34,14 @@ port rather than a separate one because only one adapter has ever existed
 here, and splitting a port for a backend that does not exist yet is the
 premature abstraction CLAUDE.md warns against — revisit when a second
 adapter actually needs a different shape.
+
+``presign_get`` seals ``content_type`` into its token the same way
+``presign_put`` already seals one for the upload side — a real bucket
+returns the right ``Content-Type`` on GET because it stored that metadata
+alongside the object at PUT time; this local filesystem adapter has no such
+metadata store, so the caller (which already looked the asset up to reach
+its ``storage_key``) hands the content type back in at presign time
+instead.
 """
 
 from __future__ import annotations
@@ -62,6 +70,12 @@ class UploadClaims:
     uploaded_by: UserId
 
 
+@dataclass(frozen=True)
+class DownloadedObject:
+    data: bytes
+    content_type: str
+
+
 class ObjectStorage(Protocol):
     def new_storage_key(self, tenant_id: TenantId, *, kind: str, extension: str) -> str: ...
 
@@ -79,7 +93,7 @@ class ObjectStorage(Protocol):
     ) -> PresignedUpload: ...
 
     async def presign_get(
-        self, storage_key: str, *, now: datetime, expires_in: timedelta
+        self, storage_key: str, *, content_type: str, now: datetime, expires_in: timedelta
     ) -> str: ...
 
     async def peek_upload(self, token: str, *, now: datetime) -> tuple[UploadClaims, int]:
@@ -92,7 +106,7 @@ class ObjectStorage(Protocol):
 
     async def accept_upload(self, token: str, data: bytes, *, now: datetime) -> UploadClaims: ...
 
-    async def resolve_download(self, token: str, *, now: datetime) -> bytes: ...
+    async def resolve_download(self, token: str, *, now: datetime) -> DownloadedObject: ...
 
     async def read(self, storage_key: str) -> bytes: ...
 

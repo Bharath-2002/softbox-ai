@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-from app.services.ports.object_storage import PresignedUpload, UploadClaims
+from app.services.ports.object_storage import DownloadedObject, PresignedUpload, UploadClaims
 from app.shared.errors import NotFoundError, ValidationError
 from app.shared.ids import TenantId, UserId
 
@@ -19,6 +19,7 @@ class _PendingPut:
 @dataclass(frozen=True)
 class _PendingGet:
     storage_key: str
+    content_type: str
     expires_at: datetime
 
 
@@ -66,10 +67,12 @@ class InMemoryObjectStorage:
             expires_at=now + expires_in,
         )
 
-    async def presign_get(self, storage_key: str, *, now: datetime, expires_in: timedelta) -> str:
+    async def presign_get(
+        self, storage_key: str, *, content_type: str, now: datetime, expires_in: timedelta
+    ) -> str:
         token = str(uuid4())
         self._pending_gets[token] = _PendingGet(
-            storage_key=storage_key, expires_at=now + expires_in
+            storage_key=storage_key, content_type=content_type, expires_at=now + expires_in
         )
         return f"https://fake-object-storage.test/{token}"
 
@@ -88,11 +91,12 @@ class InMemoryObjectStorage:
         await self.write(pending.claims.storage_key, data)
         return pending.claims
 
-    async def resolve_download(self, token: str, *, now: datetime) -> bytes:
+    async def resolve_download(self, token: str, *, now: datetime) -> DownloadedObject:
         pending = self._pending_gets.get(token)
         if pending is None or now > pending.expires_at:
             raise ValidationError("Invalid or expired download token.")
-        return await self.read(pending.storage_key)
+        data = await self.read(pending.storage_key)
+        return DownloadedObject(data=data, content_type=pending.content_type)
 
     async def read(self, storage_key: str) -> bytes:
         if storage_key not in self._objects:

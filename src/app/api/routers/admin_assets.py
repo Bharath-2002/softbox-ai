@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
 from app.api.deps.authorization import PrincipalDep, require_capability
-from app.bootstrap.di import RequestUploadDep
+from app.bootstrap.di import RequestDownloadDep, RequestUploadDep
 from app.entities.asset import AssetKind
 from app.entities.capabilities import Capability
+from app.shared.ids import AssetId
 
 router = APIRouter()
 _manage = [Depends(require_capability(Capability.TEMPLATE_MANAGE))]
@@ -58,3 +59,20 @@ async def request_upload(
         storage_key=upload.storage_key,
         expires_at=upload.expires_at,
     )
+
+
+class PresignedDownloadResponse(BaseModel):
+    url: str
+
+
+@router.post(
+    "/assets/{asset_id}/download",
+    response_model=PresignedDownloadResponse,
+    dependencies=_manage,
+)
+async def request_download(
+    asset_id: AssetId, principal: PrincipalDep, use_case: RequestDownloadDep
+) -> PresignedDownloadResponse:
+    assert principal.tenant_id is not None
+    url = await use_case(tenant_id=principal.tenant_id, asset_id=asset_id)
+    return PresignedDownloadResponse(url=url)

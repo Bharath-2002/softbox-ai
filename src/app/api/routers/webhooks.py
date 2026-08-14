@@ -18,6 +18,11 @@ first and only checking the size afterward (what a single ``await
 request.body()`` would do) would let a forged or oversized request make
 this process buffer an unbounded amount of memory before anything rejects
 it.
+
+The download route below carries no comparable size concern — it reads
+bytes this process already wrote, not an attacker-controlled request body
+— so ``ObjectStorage.resolve_download`` decodes the token and reads in one
+call, unlike the upload route's decode-then-bounded-stream split.
 """
 
 from __future__ import annotations
@@ -72,3 +77,9 @@ async def receive_upload(
         uploaded_by=claims.uploaded_by,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/uploads/{token}")
+async def download_asset(token: str, object_storage: ObjectStorageDep, clock: ClockDep) -> Response:
+    downloaded = await object_storage.resolve_download(token, now=clock.now())
+    return Response(content=downloaded.data, media_type=downloaded.content_type)

@@ -168,10 +168,14 @@ async def test_resolve_download_reads_back_what_was_written(ctx: Context) -> Non
     await ctx.storage.write(key, b"secret-bytes")
     now = utcnow()
 
-    download_url = await ctx.storage.presign_get(key, now=now, expires_in=timedelta(minutes=10))
+    download_url = await ctx.storage.presign_get(
+        key, content_type="image/jpeg", now=now, expires_in=timedelta(minutes=10)
+    )
     token = download_url.rsplit("/", 1)[-1]
 
-    assert await ctx.storage.resolve_download(token, now=now) == b"secret-bytes"
+    downloaded = await ctx.storage.resolve_download(token, now=now)
+    assert downloaded.data == b"secret-bytes"
+    assert downloaded.content_type == "image/jpeg"
 
 
 async def test_new_storage_key_is_namespaced_by_tenant(ctx: Context) -> None:

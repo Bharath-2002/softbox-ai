@@ -31,7 +31,7 @@ from joserfc import jwt
 from joserfc.jwk import OctKey
 from joserfc.jwt import JWTClaimsRegistry
 
-from app.services.ports.object_storage import PresignedUpload, UploadClaims
+from app.services.ports.object_storage import DownloadedObject, PresignedUpload, UploadClaims
 from app.shared.errors import NotFoundError, ValidationError
 from app.shared.ids import TenantId, UserId
 
@@ -140,9 +140,15 @@ class LocalObjectStorage:
             expires_at=now + expires_in,
         )
 
-    async def presign_get(self, storage_key: str, *, now: datetime, expires_in: timedelta) -> str:
+    async def presign_get(
+        self, storage_key: str, *, content_type: str, now: datetime, expires_in: timedelta
+    ) -> str:
         token = self._tokens.encode(
-            storage_key=storage_key, purpose="get", now=now, expires_in=expires_in
+            storage_key=storage_key,
+            purpose="get",
+            now=now,
+            expires_in=expires_in,
+            content_type=content_type,
         )
         return f"{self._base_url}/api/v1/webhooks/uploads/{token}"
 
@@ -169,9 +175,11 @@ class LocalObjectStorage:
             uploaded_by=UserId(UUID(str(claims["uploaded_by"]))),
         )
 
-    async def resolve_download(self, token: str, *, now: datetime) -> bytes:
+    async def resolve_download(self, token: str, *, now: datetime) -> DownloadedObject:
         claims = self._tokens.decode(token, purpose="get", now=now)
-        return await self.read(str(claims["storage_key"]))
+        data = await self.read(str(claims["storage_key"]))
+        content_type = str(claims.get("content_type") or "application/octet-stream")
+        return DownloadedObject(data=data, content_type=content_type)
 
     async def read(self, storage_key: str) -> bytes:
         path = self._path_for(storage_key)

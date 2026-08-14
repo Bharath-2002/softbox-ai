@@ -114,6 +114,57 @@ async def test_a_requested_upload_is_verified_and_registered_end_to_end() -> Non
     assert registered.storage_key == upload["storage_key"]
 
 
+async def test_an_uploaded_asset_can_be_downloaded_back_end_to_end() -> None:
+    app, uow_factory, _clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["template.manage"]
+    )
+    data = _jpeg_bytes()
+
+    async with await _client(app) as http:
+        request_response = await http.post(
+            "/api/v1/admin/assets/uploads",
+            json={"kind": "input", "extension": "jpg", "content_type": "image/jpeg"},
+            headers=headers,
+        )
+        upload_token = request_response.json()["url"].rsplit("/", 1)[-1]
+        await http.put(
+            f"/api/v1/webhooks/uploads/{upload_token}",
+            content=data,
+            headers={"Content-Type": "image/jpeg"},
+        )
+        sha256 = hashlib.sha256(data).hexdigest()
+        asset = await uow_factory.assets.get_by_sha256(tenant_id, sha256, AssetKind.INPUT)
+        assert asset is not None
+
+        download_request = await http.post(
+            f"/api/v1/admin/assets/{asset.id}/download", headers=headers
+        )
+        assert download_request.status_code == 200
+        download_token = download_request.json()["url"].rsplit("/", 1)[-1]
+
+        download_response = await http.get(f"/api/v1/webhooks/uploads/{download_token}")
+
+    assert download_response.status_code == 200
+    assert download_response.content == data
+    assert download_response.headers["content-type"] == "image/jpeg"
+
+
+async def test_requesting_a_download_for_an_unknown_asset_is_not_found() -> None:
+    app, _uow_factory, _clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["template.manage"]
+    )
+
+    async with await _client(app) as http:
+        response = await http.post(f"/api/v1/admin/assets/{uuid.uuid4()}/download", headers=headers)
+
+    assert response.status_code == 404
+
+
 async def test_requesting_an_upload_requires_the_template_manage_capability() -> None:
     app, _uow_factory, _clock, codec, _storage = _build()
     tenant_id_str = str(new_tenant_id())
