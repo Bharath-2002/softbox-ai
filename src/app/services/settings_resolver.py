@@ -1,10 +1,16 @@
-"""D16's read path: ``platform -> tenant -> category`` (root to leaf),
-most specific wins. ``product`` is the fourth level D16 names but has no
-table to resolve against until M4 — adding it later only means widening
-``resolve``'s signature, not restructuring the walk.
+"""D16's read path: ``platform -> tenant -> category -> product`` (root to
+leaf), most specific wins.
 
 Same shape as ``PrincipalResolver``/``SpecResolver``: ports injected
 directly, not a ``UnitOfWork``, so this opens no transaction of its own.
+
+``product_id`` is a bare id, not resolved against a `ProductRepository` the
+way ``category_id`` is against `CategoryRepository` — a product-scoped
+setting is a single leaf-level check (`entities.setting`'s own docstring:
+"``scope_id`` is a bare id... not a foreign key"), unlike category, which
+needs `Category.ancestor_ids()` to walk root-to-leaf. Whether the product
+actually exists is not this resolver's job to verify — the same posture
+`UpsertSetting`/`Setting.create` already take toward `scope_id` in general.
 """
 
 from __future__ import annotations
@@ -15,7 +21,7 @@ from app.entities.setting import SettingScope
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.settings_repository import SettingsRepository
 from app.shared.errors import NotFoundError
-from app.shared.ids import CategoryId, TenantId
+from app.shared.ids import CategoryId, ProductId, TenantId
 
 
 class SettingsResolver:
@@ -24,7 +30,12 @@ class SettingsResolver:
         self._categories = categories
 
     async def resolve(
-        self, tenant_id: TenantId, key: str, *, category_id: CategoryId | None = None
+        self,
+        tenant_id: TenantId,
+        key: str,
+        *,
+        category_id: CategoryId | None = None,
+        product_id: ProductId | None = None,
     ) -> Any | None:
         resolved: Any | None = None
 
@@ -46,5 +57,12 @@ class SettingsResolver:
                 )
                 if category_setting is not None:
                     resolved = category_setting.value
+
+        if product_id is not None:
+            product_setting = await self._settings.get(
+                tenant_id, SettingScope.PRODUCT, product_id, key
+            )
+            if product_setting is not None:
+                resolved = product_setting.value
 
         return resolved

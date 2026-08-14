@@ -10,7 +10,7 @@ from typing import Any
 
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.services.settings_resolver import SettingsResolver
-from app.shared.ids import CategoryId, TenantId
+from app.shared.ids import CategoryId, ProductId, TenantId
 
 
 class ResolveSetting:
@@ -18,8 +18,15 @@ class ResolveSetting:
         self._uow_factory = uow_factory
 
     async def __call__(
-        self, *, tenant_id: TenantId, key: str, category_id: CategoryId | None = None
+        self,
+        *,
+        tenant_id: TenantId,
+        key: str,
+        category_id: CategoryId | None = None,
+        product_id: ProductId | None = None,
     ) -> Any | None:
         async with self._uow_factory(tenant_id) as uow:
             resolver = SettingsResolver(uow.settings, uow.categories)
-            return await resolver.resolve(tenant_id, key, category_id=category_id)
+            return await resolver.resolve(
+                tenant_id, key, category_id=category_id, product_id=product_id
+            )

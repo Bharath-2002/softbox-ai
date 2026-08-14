@@ -19,10 +19,11 @@ from app.bootstrap.app import create_app
 from app.bootstrap.di import get_clock, get_uow_factory
 from app.bootstrap.settings import Settings
 from app.entities.category import Category
+from app.entities.setting import SettingScope
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.services.ports.token_issuer import AccessTokenClaims
 from app.shared.clock import utcnow
-from app.shared.ids import TenantId, new_tenant_id, new_user_id
+from app.shared.ids import TenantId, new_product_id, new_tenant_id, new_user_id
 from tests.fakes.clock import FakeClock
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
 
@@ -116,6 +117,40 @@ async def test_upsert_and_resolve_a_category_setting_overrides_the_tenant_one() 
         )
 
     assert resolved.json()["value"] is False
+
+
+async def test_upsert_and_resolve_a_product_setting_overrides_the_tenant_one() -> None:
+    app, uow_factory, _clock, codec = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    product_id = new_product_id()
+    headers = _bearer(
+        codec, tenant_id=tenant_id_str, role="admin", capabilities=["settings.manage"]
+    )
+
+    async with await _client(app) as http:
+        await http.put(
+            "/api/v1/admin/settings/tenant/approval.required",
+            json={"value": True},
+            headers=headers,
+        )
+        await http.put(
+            f"/api/v1/admin/settings/product/{product_id}/approval.required",
+            json={"value": False},
+            headers=headers,
+        )
+
+        resolved = await http.get(
+            "/api/v1/admin/settings/approval.required",
+            params={"product_id": str(product_id)},
+            headers=headers,
+        )
+
+    assert resolved.json()["value"] is False
+    stored = await uow_factory.settings.get(
+        tenant_id, SettingScope.PRODUCT, product_id, "approval.required"
+    )
+    assert stored is not None
 
 
 async def test_unset_key_resolves_to_a_null_value() -> None:

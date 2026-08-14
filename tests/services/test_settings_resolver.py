@@ -1,5 +1,5 @@
 """SettingsResolver against the in-memory fakes — platform -> tenant ->
-category (root to leaf), most specific wins (D16).
+category -> product (root to leaf), most specific wins (D16).
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from app.entities.setting import Setting, SettingScope
 from app.services.settings_resolver import SettingsResolver
 from app.shared.clock import utcnow
 from app.shared.errors import NotFoundError
-from app.shared.ids import new_category_id, new_tenant_id
+from app.shared.ids import new_category_id, new_product_id, new_tenant_id
 from tests.fakes.category_repository import InMemoryCategoryRepository
 from tests.fakes.settings_repository import InMemorySettingsRepository
 
@@ -127,3 +127,69 @@ async def test_unknown_category_is_not_found() -> None:
 
     with pytest.raises(NotFoundError):
         await resolver.resolve(new_tenant_id(), "approval.required", category_id=new_category_id())
+
+
+async def test_a_products_override_beats_its_category_and_the_tenant() -> None:
+    resolver, settings, categories = _resolver()
+    tenant_id = new_tenant_id()
+    product_id = new_product_id()
+    now = utcnow()
+    category = Category.create(
+        tenant_id, key="sarees", name="Sarees", slug="sarees", parent=None, now=now
+    )
+    await categories.add(category)
+
+    await settings.add(
+        Setting.create(
+            scope_type=SettingScope.CATEGORY,
+            tenant_id=tenant_id,
+            scope_id=category.id,
+            key="approval.required",
+            value=True,
+            now=now,
+        )
+    )
+    await settings.add(
+        Setting.create(
+            scope_type=SettingScope.PRODUCT,
+            tenant_id=tenant_id,
+            scope_id=product_id,
+            key="approval.required",
+            value=False,
+            now=now,
+        )
+    )
+
+    resolved = await resolver.resolve(
+        tenant_id, "approval.required", category_id=category.id, product_id=product_id
+    )
+    assert resolved is False
+
+
+async def test_a_product_override_is_ignored_when_resolving_a_different_product() -> None:
+    resolver, settings, _categories = _resolver()
+    tenant_id = new_tenant_id()
+    now = utcnow()
+    await settings.add(
+        Setting.create(
+            scope_type=SettingScope.TENANT,
+            tenant_id=tenant_id,
+            scope_id=None,
+            key="approval.required",
+            value=True,
+            now=now,
+        )
+    )
+    await settings.add(
+        Setting.create(
+            scope_type=SettingScope.PRODUCT,
+            tenant_id=tenant_id,
+            scope_id=new_product_id(),
+            key="approval.required",
+            value=False,
+            now=now,
+        )
+    )
+
+    resolved = await resolver.resolve(tenant_id, "approval.required", product_id=new_product_id())
+    assert resolved is True
