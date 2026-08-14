@@ -26,6 +26,7 @@ SettingId = NewType("SettingId", uuid.UUID)
 AssetId = NewType("AssetId", uuid.UUID)
 CatalogTemplateId = NewType("CatalogTemplateId", uuid.UUID)
 ProductId = NewType("ProductId", uuid.UUID)
+ProductVariantId = NewType("ProductVariantId", uuid.UUID)
 
 
 def new_tenant_id() -> TenantId:
@@ -90,3 +91,7 @@ def new_catalog_template_id() -> CatalogTemplateId:
 
 def new_product_id() -> ProductId:
     return ProductId(uuid.uuid4())
+
+
+def new_product_variant_id() -> ProductVariantId:
+    return ProductVariantId(uuid.uuid4())
