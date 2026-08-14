@@ -30,6 +30,15 @@ here rather than a generic ``admin_system.py`` because every job type in
 this codebase today (``generation_item.render_requested``,
 ``catalog_image.qc_requested``) is generation-pipeline work; worth
 revisiting once a non-generation job type exists (M7's publishing queue).
+
+``POST .../reconcile-requests`` is the "due/retryable" half: settles every
+``running`` ``GenerationRequest`` whose required catalog image slots have
+all resolved into ``succeeded``/``partially_failed``/``failed`` and
+reconciles its quota reservation to match (see
+``features.generation.reconcile_generation_requests_for_tenant``'s
+docstring for the commit/release split). Returns how many requests it
+settled, the same "count, not a list" shape ``RelayOutboxEventsForTenant``
+uses for a sweep over many rows rather than a single claimed job.
 """
 
 from __future__ import annotations
@@ -42,6 +51,7 @@ from app.bootstrap.di import (
     CatalogImageQcAgentDep,
     GenerationRenderAgentDep,
     ReapStuckTaskQueueJobsDep,
+    ReconcileGenerationRequestsForTenantDep,
 )
 from app.entities.capabilities import Capability
 from app.entities.generation_item import GenerationItem
@@ -119,3 +129,18 @@ async def reap_stuck_jobs(
     assert principal.tenant_id is not None
     reaped = await use_case(principal.tenant_id)
     return ReapStuckJobsResponse(reaped=reaped)
+
+
+class ReconcileRequestsResponse(BaseModel):
+    settled: int
+
+
+@router.post(
+    "/generation/reconcile-requests", response_model=ReconcileRequestsResponse, dependencies=_manage
+)
+async def reconcile_generation_requests(
+    principal: PrincipalDep, use_case: ReconcileGenerationRequestsForTenantDep
+) -> ReconcileRequestsResponse:
+    assert principal.tenant_id is not None
+    settled = await use_case(principal.tenant_id)
+    return ReconcileRequestsResponse(settled=settled)

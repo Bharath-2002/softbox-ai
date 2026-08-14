@@ -37,6 +37,9 @@ from app.features.generation.complete_catalog_image_qc import CompleteCatalogIma
 from app.features.generation.complete_generation_item_render import CompleteGenerationItemRender
 from app.features.generation.fail_catalog_image_qc import FailCatalogImageQc
 from app.features.generation.fail_generation_item_render import FailGenerationItemRender
+from app.features.generation.reconcile_generation_requests_for_tenant import (
+    ReconcileGenerationRequestsForTenant,
+)
 from app.features.generation.start_catalog_image_qc import StartCatalogImageQc
 from app.features.generation.start_generation_item_render import StartGenerationItemRender
 from app.features.identity.complete_login import CompleteLogin
@@ -498,6 +501,12 @@ def get_reap_stuck_task_queue_jobs(
     return ReapStuckTaskQueueJobs(uow_factory, clock)
 
 
+def get_reconcile_generation_requests_for_tenant(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> ReconcileGenerationRequestsForTenant:
+    return ReconcileGenerationRequestsForTenant(uow_factory, clock)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -583,4 +592,7 @@ GenerationRenderAgentDep = Annotated[GenerationRenderAgent, Depends(get_generati
 CatalogImageQcAgentDep = Annotated[CatalogImageQcAgent, Depends(get_catalog_image_qc_agent)]
 ReapStuckTaskQueueJobsDep = Annotated[
     ReapStuckTaskQueueJobs, Depends(get_reap_stuck_task_queue_jobs)
+]
+ReconcileGenerationRequestsForTenantDep = Annotated[
+    ReconcileGenerationRequestsForTenant, Depends(get_reconcile_generation_requests_for_tenant)
 ]

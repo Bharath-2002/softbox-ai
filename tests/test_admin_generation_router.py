@@ -359,3 +359,26 @@ async def test_reap_stuck_jobs_over_http_requires_the_product_manage_capability(
         response = await http.post("/api/v1/admin/generation/reap-stuck-jobs", headers=headers)
 
     assert response.status_code == 403
+
+
+async def test_reconcile_requests_over_http_settles_nothing_when_nothing_is_running() -> None:
+    app, _uow_factory, _clock, codec, _storage, _image_generation, _quality_control = _build()
+    tenant_id_str = str(uuid.uuid4())
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post("/api/v1/admin/generation/reconcile-requests", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"settled": 0}
+
+
+async def test_reconcile_requests_over_http_requires_the_product_manage_capability() -> None:
+    app, _uow_factory, _clock, codec, _storage, _image_generation, _quality_control = _build()
+    tenant_id_str = str(uuid.uuid4())
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="viewer", capabilities=[])
+
+    async with await _client(app) as http:
+        response = await http.post("/api/v1/admin/generation/reconcile-requests", headers=headers)
+
+    assert response.status_code == 403

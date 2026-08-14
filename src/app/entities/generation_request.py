@@ -8,11 +8,19 @@ alter what an in-flight or historical request meant.
 `create()` and `mark_running()` land in this chunk — `mark_running` is
 driven by `FanOutGenerationItems`, which moves a request out of `queued`
 once it has finished expanding it into `generation_items` and enqueueing
-their render jobs, i.e. once real work is actually in flight. The rest of
-`GenerationRequestStatus` (`succeeded`/`partially_failed`/`failed`/
-`cancelled`) still has no caller — those are the worker's and the
-reconciler's job, both still ahead in the M5 sequence. Same posture
-`entities.product` documents for its own not-yet-driven states.
+their render jobs, i.e. once real work is actually in flight.
+
+`mark_succeeded`/`mark_partially_failed`/`mark_failed` all funnel through
+one private `_mark_terminal`, driven by
+`features.generation.reconcile_generation_requests_for_tenant` (the
+reconciler's "due/retryable" half — see `services.generation_request_
+rollup` for how a `running` request's `generation_items` decide which of
+the three it becomes) — every terminal transition sets `completed_at` and
+is only legal from `running`, so a second reconcile pass on an
+already-settled request raises rather than silently re-transitioning it.
+`cancelled` (`queued -> cancelled`, `running -> cancelled`) still has no
+caller — cancellation is a human-initiated action with no use case built
+yet, unlike the other three which the reconciler drives automatically.
 """
 
 from __future__ import annotations
@@ -88,3 +96,18 @@ class GenerationRequest:
         if self.status != GenerationRequestStatus.QUEUED:
             raise ValidationError(f"Cannot start running from status {self.status.value!r}.")
         self.status = GenerationRequestStatus.RUNNING
+
+    def mark_succeeded(self, *, now: datetime) -> None:
+        self._mark_terminal(GenerationRequestStatus.SUCCEEDED, now=now)
+
+    def mark_partially_failed(self, *, now: datetime) -> None:
+        self._mark_terminal(GenerationRequestStatus.PARTIALLY_FAILED, now=now)
+
+    def mark_failed(self, *, now: datetime) -> None:
+        self._mark_terminal(GenerationRequestStatus.FAILED, now=now)
+
+    def _mark_terminal(self, status: GenerationRequestStatus, *, now: datetime) -> None:
+        if self.status != GenerationRequestStatus.RUNNING:
+            raise ValidationError(f"Cannot settle from status {self.status.value!r}.")
+        self.status = status
+        self.completed_at = now

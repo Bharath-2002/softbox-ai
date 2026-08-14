@@ -224,3 +224,41 @@ async def test_settings_snapshot_round_trips(ctx: Context) -> None:
     fetched = await ctx.requests.get(ctx.tenant_id, request.id)
     assert fetched is not None
     assert fetched.settings_snapshot == {"model": "nano-banana-2"}
+
+
+async def test_list_running_for_update_returns_only_running_requests(ctx: Context) -> None:
+    queued = _request(ctx)
+    await ctx.requests.add(queued)
+    running = _request(ctx)
+    running.mark_running(now=utcnow())
+    await ctx.requests.add(running)
+
+    result = await ctx.requests.list_running_for_update(ctx.tenant_id)
+
+    assert [r.id for r in result] == [running.id]
+
+
+async def test_list_running_for_update_respects_the_limit(ctx: Context) -> None:
+    for _ in range(3):
+        request = _request(ctx)
+        request.mark_running(now=utcnow())
+        await ctx.requests.add(request)
+
+    result = await ctx.requests.list_running_for_update(ctx.tenant_id, limit=2)
+
+    assert len(result) == 2
+
+
+async def test_settling_a_request_persists_the_terminal_status(ctx: Context) -> None:
+    request = _request(ctx)
+    request.mark_running(now=utcnow())
+    await ctx.requests.add(request)
+    now = utcnow()
+
+    request.mark_succeeded(now=now)
+    await ctx.requests.update(request)
+
+    fetched = await ctx.requests.get(ctx.tenant_id, request.id)
+    assert fetched is not None
+    assert fetched.status.value == "succeeded"
+    assert fetched.completed_at == now

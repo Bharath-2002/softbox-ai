@@ -31,3 +31,18 @@ class SqlGenerationRequestRepository:
 
     async def update(self, request: GenerationRequest) -> None:
         await self._session.flush()
+
+    async def list_running_for_update(
+        self, tenant_id: TenantId, *, limit: int = 50
+    ) -> list[GenerationRequest]:
+        stmt = (
+            select(GenerationRequest)
+            .where(
+                generation_requests_table.c.tenant_id == tenant_id,
+                generation_requests_table.c.status == "running",
+            )
+            .order_by(generation_requests_table.c.created_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
