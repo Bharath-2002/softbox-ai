@@ -57,6 +57,7 @@ from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion, SpecVersionStatus
 from app.entities.identity import Identity
 from app.entities.image_slots import CatalogImageSlot, InputImageSlot
+from app.entities.product import Product, ProductStatus
 from app.entities.roles import Role
 from app.entities.session import Session
 from app.entities.setting import Setting, SettingScope
@@ -123,6 +124,14 @@ _template_kind_type = Enum(
 _template_status_type = Enum(
     TemplateStatus,
     name="catalog_template_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_product_status_type = Enum(
+    ProductStatus,
+    name="product_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -392,6 +401,24 @@ catalog_templates_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+products_table = Table(
+    "products",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("category_id", Uuid(), nullable=False),
+    Column("spec_version_id", Uuid(), nullable=False),
+    Column("attributes", JSONB(), nullable=False),
+    Column("title", Text(), nullable=True),
+    Column("sku", Text(), nullable=True),
+    Column("price_amount", BigInteger(), nullable=True),
+    Column("price_currency", Text(), nullable=True),
+    Column("status", _product_status_type, nullable=False),
+    Column("created_by", Uuid(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -456,4 +483,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(Setting, settings_table)
     mapper_registry.map_imperatively(Asset, assets_table)
     mapper_registry.map_imperatively(CatalogTemplate, catalog_templates_table)
+    mapper_registry.map_imperatively(Product, products_table)
     _mapped = True

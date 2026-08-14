@@ -49,6 +49,7 @@ from app.infrastructure.persistence.input_image_slot_repository import (
     SqlInputImageSlotRepository,
 )
 from app.infrastructure.persistence.platform_admin_repository import SqlPlatformAdminRepository
+from app.infrastructure.persistence.product_repository import SqlProductRepository
 from app.infrastructure.persistence.session_repository import SqlSessionRepository
 from app.infrastructure.persistence.settings_repository import SqlSettingsRepository
 from app.infrastructure.persistence.tenant_membership_repository import (
@@ -74,6 +75,7 @@ from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.input_image_slot_repository import InputImageSlotRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
+from app.services.ports.product_repository import ProductRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
@@ -121,6 +123,7 @@ class SqlUnitOfWork:
         self._settings: SqlSettingsRepository | None = None
         self._assets: SqlAssetRepository | None = None
         self._catalog_templates: SqlCatalogTemplateRepository | None = None
+        self._products: SqlProductRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -240,6 +243,12 @@ class SqlUnitOfWork:
             self._catalog_templates = SqlCatalogTemplateRepository(self.session)
         return self._catalog_templates
 
+    @property
+    def products(self) -> ProductRepository:
+        if self._products is None:
+            self._products = SqlProductRepository(self.session)
+        return self._products
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -285,6 +294,7 @@ class SqlUnitOfWork:
             self._settings = None
             self._assets = None
             self._catalog_templates = None
+            self._products = None
 
 
 def make_unit_of_work_factory(
