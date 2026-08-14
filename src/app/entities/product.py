@@ -14,15 +14,22 @@ under it. Reading "this product's resolved spec" is just
 new snapshot-building logic is needed, since a `CategorySpecVersion.snapshot`
 is already the fully-resolved blob a publish wrote.
 
-Only `create` exists here so far. The full lifecycle (`draft ─▶ ready ─▶
-generating ─▶ review ─▶ approved ─▶ publishing ─▶ published`, with
-`needs_attention` reachable from several states) spans M4 through M7 —
-CLAUDE.md says not to build a transition with nothing to call it yet, so
-`ProductStatus` names every state the diagram in `docs/ARCHITECTURE.md` §6
+`mark_ready`/`mark_needs_attention` are driven by `RecomputeProductReadiness`
+(`services.product_readiness.compute_product_readiness`), the only readiness
+trigger that exists today — nothing calls this automatically yet, since no
+attribute-editing or image-capture use case exists to trigger a recompute
+from. `mark_needs_attention` only accepts `ready`/`needs_attention` as its
+starting state, not `draft`: a product that was never ready has nothing to
+lose by staying `draft`, so a recompute that finds it still incomplete is a
+no-op, not a `needs_attention` transition — that state specifically means
+*regressed from ready*, matching the one arrow `docs/ARCHITECTURE.md` §6
+draws into it.
+
+The rest of the lifecycle (`generating ─▶ review ─▶ approved ─▶ publishing
+─▶ published`) spans M5-M7 — CLAUDE.md says not to build a transition with
+nothing to call it yet, so `ProductStatus` names every state the diagram
 describes (matching what the migration's `CHECK` constraint allows), but
-entity methods for `ready`/`needs_attention`/etc. land with the use cases
-that actually drive them (readiness needs `product_input_images`, which
-doesn't exist yet).
+those entity methods land with the use cases that actually drive them.
 """
 
 from __future__ import annotations
@@ -32,6 +39,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from app.shared.errors import ValidationError
 from app.shared.ids import (
     CategoryId,
     CategorySpecVersionId,
@@ -99,3 +107,21 @@ class Product:
             created_at=now,
             updated_at=now,
         )
+
+    def mark_ready(self, *, now: datetime) -> None:
+        if self.status not in (
+            ProductStatus.DRAFT,
+            ProductStatus.READY,
+            ProductStatus.NEEDS_ATTENTION,
+        ):
+            raise ValidationError(f"Cannot mark ready from status {self.status.value!r}.")
+        self.status = ProductStatus.READY
+        self.updated_at = now
+
+    def mark_needs_attention(self, *, now: datetime) -> None:
+        if self.status not in (ProductStatus.READY, ProductStatus.NEEDS_ATTENTION):
+            raise ValidationError(
+                f"Only a ready product can need attention, not {self.status.value!r}."
+            )
+        self.status = ProductStatus.NEEDS_ATTENTION
+        self.updated_at = now

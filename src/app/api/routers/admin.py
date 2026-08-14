@@ -16,6 +16,7 @@ from app.api.routers import (
     admin_assets,
     admin_attributes,
     admin_image_slots,
+    admin_products,
     admin_settings,
     admin_taxonomy,
     admin_templates,
@@ -28,3 +29,4 @@ router.include_router(admin_image_slots.router)
 router.include_router(admin_settings.router)
 router.include_router(admin_assets.router)
 router.include_router(admin_templates.router)
+router.include_router(admin_products.router)

@@ -32,6 +32,7 @@ from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
 from app.features.identity.start_impersonation import StartImpersonation
+from app.features.products.recompute_product_readiness import RecomputeProductReadiness
 from app.features.settings.resolve_setting import ResolveSetting
 from app.features.settings.upsert_setting import UpsertSetting
 from app.features.taxonomy.attach_input_to_catalog_slot import AttachInputToCatalogSlot
@@ -327,6 +328,12 @@ def get_seed_stock_presets(uow_factory: UowFactoryDep, clock: ClockDep) -> SeedS
     return SeedStockPresets(uow_factory, clock)
 
 
+def get_recompute_product_readiness(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> RecomputeProductReadiness:
+    return RecomputeProductReadiness(uow_factory, clock)
+
+
 def get_start_template_analysis(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> StartTemplateAnalysis:
@@ -417,4 +424,7 @@ CreateTemplateFromUploadDep = Annotated[
 ListTemplatesDep = Annotated[ListTemplates, Depends(get_list_templates)]
 ArchiveTemplateDep = Annotated[ArchiveTemplate, Depends(get_archive_template)]
 SeedStockPresetsDep = Annotated[SeedStockPresets, Depends(get_seed_stock_presets)]
+RecomputeProductReadinessDep = Annotated[
+    RecomputeProductReadiness, Depends(get_recompute_product_readiness)
+]
 TemplateAnalysisAgentDep = Annotated[TemplateAnalysisAgent, Depends(get_template_analysis_agent)]
