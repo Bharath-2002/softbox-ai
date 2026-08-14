@@ -178,8 +178,7 @@ class LocalObjectStorage:
     async def resolve_download(self, token: str, *, now: datetime) -> DownloadedObject:
         claims = self._tokens.decode(token, purpose="get", now=now)
         data = await self.read(str(claims["storage_key"]))
-        content_type = str(claims.get("content_type") or "application/octet-stream")
-        return DownloadedObject(data=data, content_type=content_type)
+        return DownloadedObject(data=data, content_type=str(claims["content_type"]))
 
     async def read(self, storage_key: str) -> bytes:
         path = self._path_for(storage_key)

@@ -163,6 +163,7 @@ async def test_requesting_a_download_for_an_unknown_asset_is_not_found() -> None
         response = await http.post(f"/api/v1/admin/assets/{uuid.uuid4()}/download", headers=headers)
 
     assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
 
 
 async def test_requesting_an_upload_requires_the_template_manage_capability() -> None:
