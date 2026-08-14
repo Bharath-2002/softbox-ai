@@ -8,7 +8,7 @@ from app.entities.content_draft import ContentDraft
 from app.entities.product_variant import ProductVariant
 from app.entities.social_account import SocialAccount
 from app.features.publishing.create_publication import CreatePublication
-from app.shared.errors import NotFoundError, ValidationError
+from app.shared.errors import ConflictError, NotFoundError, ValidationError
 from app.shared.ids import (
     AssetId,
     ContentDraftId,
@@ -140,6 +140,57 @@ async def test_an_unapproved_content_draft_is_rejected() -> None:
             caption="x",
             media_asset_ids=[AssetId(new_asset_id())],
         )
+
+
+async def test_a_second_publish_conflicts_while_the_first_is_still_live() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
+    await use_case(
+        tenant_id=tenant_id,
+        variant_id=variant_id,
+        channel_id=channel_id,
+        content_draft_id=None,
+        caption="First.",
+        media_asset_ids=[AssetId(new_asset_id())],
+    )
+
+    with pytest.raises(ConflictError):
+        await use_case(
+            tenant_id=tenant_id,
+            variant_id=variant_id,
+            channel_id=channel_id,
+            content_draft_id=None,
+            caption="Second.",
+            media_asset_ids=[AssetId(new_asset_id())],
+        )
+
+
+async def test_a_second_publish_succeeds_once_the_first_has_reached_a_terminal_status() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
+    first = await use_case(
+        tenant_id=tenant_id,
+        variant_id=variant_id,
+        channel_id=channel_id,
+        content_draft_id=None,
+        caption="First.",
+        media_asset_ids=[AssetId(new_asset_id())],
+    )
+    first.mark_publishing(now=_NOW)
+    first.mark_published(external_post_id="post-1", permalink="https://x", now=_NOW)
+    await uow_factory.publications.update(first)
+
+    second = await use_case(
+        tenant_id=tenant_id,
+        variant_id=variant_id,
+        channel_id=channel_id,
+        content_draft_id=None,
+        caption="Second.",
+        media_asset_ids=[AssetId(new_asset_id())],
+    )
+
+    assert second.id != first.id
+    assert second.status.value == "pending"
 
 
 async def test_an_unknown_content_draft_is_not_found() -> None:

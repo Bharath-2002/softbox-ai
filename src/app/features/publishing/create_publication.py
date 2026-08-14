@@ -18,6 +18,16 @@ variant's approved catalog images — the same scope cut
 `GenerateContentDraft` already made for `channel`/`locale`: there is no
 per-channel "which images are the ones to post" rule anywhere in this
 codebase to derive it from automatically.
+
+D21's single-flight requirement ("a lock per account, variant") is enforced
+here as a `get_live` pre-check raising `ConflictError` for the common case,
+backed by the migration's partial unique index
+(`ix_publications_live_per_channel_variant`) for the check-then-act race
+between two concurrent calls — the same "app-level check, DB-level
+backstop" split D15's `uq_category_spec_versions_tenant_category_version`
+established. A publication is "live" only while `pending`/`publishing`; a
+second publish to the same channel for the same variant is fine once the
+first has reached `published` or `failed`.
 """
 
 from __future__ import annotations
@@ -26,7 +36,7 @@ from app.entities.content_draft import ContentDraftStatus
 from app.entities.publication import Publication
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.shared.clock import Clock
-from app.shared.errors import NotFoundError, ValidationError
+from app.shared.errors import ConflictError, NotFoundError, ValidationError
 from app.shared.ids import AssetId, ContentDraftId, ProductVariantId, SocialAccountId, TenantId
 
 _EVENT_TYPE = "publication.publish_requested"
@@ -67,6 +77,12 @@ class CreatePublication:
 
             if not media_asset_ids:
                 raise ValidationError("A publication needs at least one media asset.")
+
+            live = await uow.publications.get_live(tenant_id, variant_id, channel_id)
+            if live is not None:
+                raise ConflictError(
+                    "A publication for this variant and channel is already in flight."
+                )
 
             publication = Publication.create(
                 tenant_id,

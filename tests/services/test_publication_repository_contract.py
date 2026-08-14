@@ -214,6 +214,33 @@ async def test_add_then_get_round_trips(ctx: Context) -> None:
     }
 
 
+async def test_get_live_finds_a_pending_publication(ctx: Context) -> None:
+    publication = _publication(ctx)
+    await ctx.publications.add(publication)
+
+    live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
+
+    assert live is not None
+    assert live.id == publication.id
+
+
+async def test_get_live_returns_none_when_nothing_is_in_flight(ctx: Context) -> None:
+    live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
+
+    assert live is None
+
+
+async def test_get_live_ignores_a_terminal_publication(ctx: Context) -> None:
+    publication = _publication(ctx)
+    publication.mark_publishing(now=utcnow())
+    publication.mark_published(external_post_id="post-1", permalink="https://x", now=utcnow())
+    await ctx.publications.add(publication)
+
+    live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
+
+    assert live is None
+
+
 async def test_update_persists_a_status_transition(ctx: Context) -> None:
     publication = _publication(ctx)
     await ctx.publications.add(publication)
