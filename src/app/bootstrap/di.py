@@ -20,9 +20,11 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from app.agents.template_analysis import TemplateAnalysisAgent
 from app.api.deps.authorization import get_token_issuer
 from app.api.deps.content_moderation import get_content_moderation_scanner
 from app.api.deps.object_storage import get_object_storage
+from app.api.deps.vision_analysis import get_vision_analysis
 from app.features.assets.request_upload import RequestUpload
 from app.features.assets.verify_and_register_upload import VerifyAndRegisterUpload
 from app.features.identity.complete_login import CompleteLogin
@@ -61,11 +63,19 @@ from app.features.taxonomy.update_category import UpdateCategory
 from app.features.taxonomy.update_input_image_slot import UpdateInputImageSlot
 from app.features.taxonomy.update_variant_axis import UpdateVariantAxis
 from app.features.taxonomy.update_variant_axis_value import UpdateVariantAxisValue
+from app.features.templates.archive_template import ArchiveTemplate
+from app.features.templates.complete_template_analysis import CompleteTemplateAnalysis
+from app.features.templates.create_authored_template import CreateAuthoredTemplate
+from app.features.templates.create_template_from_upload import CreateTemplateFromUpload
+from app.features.templates.fail_template_analysis import FailTemplateAnalysis
+from app.features.templates.list_templates import ListTemplates
+from app.features.templates.start_template_analysis import StartTemplateAnalysis
 from app.services.ports.content_moderation import ContentModerationScanner
 from app.services.ports.identity_provider import IdentityProvider
 from app.services.ports.object_storage import ObjectStorage
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
+from app.services.ports.vision_analysis import VisionAnalysis
 from app.shared.clock import Clock
 
 
@@ -283,6 +293,52 @@ def get_verify_and_register_upload(
     return VerifyAndRegisterUpload(uow_factory, object_storage, moderation_scanner, clock)
 
 
+def get_create_authored_template(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CreateAuthoredTemplate:
+    return CreateAuthoredTemplate(uow_factory, clock)
+
+
+def get_create_template_from_upload(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CreateTemplateFromUpload:
+    return CreateTemplateFromUpload(uow_factory, clock)
+
+
+def get_list_templates(uow_factory: UowFactoryDep) -> ListTemplates:
+    return ListTemplates(uow_factory)
+
+
+def get_archive_template(uow_factory: UowFactoryDep, clock: ClockDep) -> ArchiveTemplate:
+    return ArchiveTemplate(uow_factory, clock)
+
+
+def get_start_template_analysis(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> StartTemplateAnalysis:
+    return StartTemplateAnalysis(uow_factory, clock)
+
+
+def get_complete_template_analysis(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CompleteTemplateAnalysis:
+    return CompleteTemplateAnalysis(uow_factory, clock)
+
+
+def get_fail_template_analysis(uow_factory: UowFactoryDep, clock: ClockDep) -> FailTemplateAnalysis:
+    return FailTemplateAnalysis(uow_factory, clock)
+
+
+def get_template_analysis_agent(
+    start: Annotated[StartTemplateAnalysis, Depends(get_start_template_analysis)],
+    complete: Annotated[CompleteTemplateAnalysis, Depends(get_complete_template_analysis)],
+    fail: Annotated[FailTemplateAnalysis, Depends(get_fail_template_analysis)],
+    object_storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+    vision_analysis: Annotated[VisionAnalysis, Depends(get_vision_analysis)],
+) -> TemplateAnalysisAgent:
+    return TemplateAnalysisAgent(start, complete, fail, object_storage, vision_analysis)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -339,3 +395,10 @@ RequestUploadDep = Annotated[RequestUpload, Depends(get_request_upload)]
 VerifyAndRegisterUploadDep = Annotated[
     VerifyAndRegisterUpload, Depends(get_verify_and_register_upload)
 ]
+CreateAuthoredTemplateDep = Annotated[CreateAuthoredTemplate, Depends(get_create_authored_template)]
+CreateTemplateFromUploadDep = Annotated[
+    CreateTemplateFromUpload, Depends(get_create_template_from_upload)
+]
+ListTemplatesDep = Annotated[ListTemplates, Depends(get_list_templates)]
+ArchiveTemplateDep = Annotated[ArchiveTemplate, Depends(get_archive_template)]
+TemplateAnalysisAgentDep = Annotated[TemplateAnalysisAgent, Depends(get_template_analysis_agent)]

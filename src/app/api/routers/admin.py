@@ -18,6 +18,7 @@ from app.api.routers import (
     admin_image_slots,
     admin_settings,
     admin_taxonomy,
+    admin_templates,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_tenant_context)])
@@ -26,3 +27,4 @@ router.include_router(admin_attributes.router)
 router.include_router(admin_image_slots.router)
 router.include_router(admin_settings.router)
 router.include_router(admin_assets.router)
+router.include_router(admin_templates.router)
