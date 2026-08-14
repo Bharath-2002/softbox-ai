@@ -10,8 +10,12 @@ for the same pair to collide with.
 ``role`` is free descriptive text ("garment_body", "border_detail"), not run
 through ``entities.spec_key.validate_key`` — unlike a definition's ``key``,
 it is never used as a JSONB key, a Pydantic field name, or a placeholder
-segment; ``prompt_position`` (the ``{{input.N}}`` index) is what the D14
-template actually keys off.
+segment. A D14 template placeholder keys off the *input slot's own*
+``key`` (``{{input.border_design}}`` — see ``entities.spec_key``'s and
+``services.template_placeholder_validator``'s module docstrings), not
+``prompt_position`` or this row's ``role``. ``prompt_position`` is instead
+what orders this catalog slot's role lines when a prompt is rendered
+(CHECKLIST.md's M3 section: "role lines ... ordered by `prompt_position`").
 """
 
 from __future__ import annotations
