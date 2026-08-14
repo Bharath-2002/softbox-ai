@@ -51,6 +51,7 @@ from sqlalchemy.orm import registry
 
 from app.entities.asset import Asset, AssetKind
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
+from app.entities.catalog_image import CatalogImage, CatalogImageStatus
 from app.entities.catalog_slot_input_requirement import CatalogSlotInputRequirement
 from app.entities.catalog_template import CatalogTemplate, TemplateKind, TemplateStatus
 from app.entities.category import Category
@@ -160,6 +161,14 @@ _generation_request_status_type = Enum(
 _generation_item_status_type = Enum(
     GenerationItemStatus,
     name="generation_item_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_catalog_image_status_type = Enum(
+    CatalogImageStatus,
+    name="catalog_image_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -539,6 +548,26 @@ generation_items_table = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
+catalog_images_table = Table(
+    "catalog_images",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("variant_id", Uuid(), nullable=False),
+    Column("catalog_image_slot_id", Uuid(), nullable=False),
+    Column("asset_id", Uuid(), nullable=False),
+    Column("generation_item_id", Uuid(), nullable=False),
+    Column("status", _catalog_image_status_type, nullable=False),
+    Column("qc_result", JSONB(), nullable=True),
+    Column("is_primary", Boolean(), nullable=False),
+    Column("approved_by", Uuid(), nullable=True),
+    Column("approved_at", DateTime(timezone=True), nullable=True),
+    Column("rejection_reason", Text(), nullable=True),
+    Column("superseded_by", Uuid(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -658,4 +687,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(ProductInputImage, product_input_images_table)
     mapper_registry.map_imperatively(GenerationRequest, generation_requests_table)
     mapper_registry.map_imperatively(GenerationItem, generation_items_table)
+    mapper_registry.map_imperatively(CatalogImage, catalog_images_table)
     _mapped = True

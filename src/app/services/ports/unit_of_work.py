@@ -38,6 +38,7 @@ from typing import Protocol
 from app.services.ports.asset_repository import AssetRepository
 from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
+from app.services.ports.catalog_image_repository import CatalogImageRepository
 from app.services.ports.catalog_image_slot_repository import CatalogImageSlotRepository
 from app.services.ports.catalog_slot_input_requirement_repository import (
     CatalogSlotInputRequirementRepository,
@@ -148,6 +149,9 @@ class UnitOfWork(Protocol):
 
     @property
     def generation_items(self) -> GenerationItemRepository: ...
+
+    @property
+    def catalog_images(self) -> CatalogImageRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

@@ -30,6 +30,7 @@ from app.infrastructure.persistence.attribute_definition_repository import (
     SqlAttributeDefinitionRepository,
 )
 from app.infrastructure.persistence.audit_log_repository import SqlAuditLogRepository
+from app.infrastructure.persistence.catalog_image_repository import SqlCatalogImageRepository
 from app.infrastructure.persistence.catalog_image_slot_repository import (
     SqlCatalogImageSlotRepository,
 )
@@ -82,6 +83,7 @@ from app.infrastructure.persistence.variant_axis_value_repository import (
 from app.services.ports.asset_repository import AssetRepository
 from app.services.ports.attribute_definition_repository import AttributeDefinitionRepository
 from app.services.ports.audit_log_repository import AuditLogRepository
+from app.services.ports.catalog_image_repository import CatalogImageRepository
 from app.services.ports.catalog_image_slot_repository import CatalogImageSlotRepository
 from app.services.ports.catalog_slot_input_requirement_repository import (
     CatalogSlotInputRequirementRepository,
@@ -158,6 +160,7 @@ class SqlUnitOfWork:
         self._quota_reservations: SqlQuotaReservationRepository | None = None
         self._generation_requests: SqlGenerationRequestRepository | None = None
         self._generation_items: SqlGenerationItemRepository | None = None
+        self._catalog_images: SqlCatalogImageRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -331,6 +334,12 @@ class SqlUnitOfWork:
             self._generation_items = SqlGenerationItemRepository(self.session)
         return self._generation_items
 
+    @property
+    def catalog_images(self) -> CatalogImageRepository:
+        if self._catalog_images is None:
+            self._catalog_images = SqlCatalogImageRepository(self.session)
+        return self._catalog_images
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -385,6 +394,7 @@ class SqlUnitOfWork:
             self._quota_reservations = None
             self._generation_requests = None
             self._generation_items = None
+            self._catalog_images = None
 
 
 def make_unit_of_work_factory(
