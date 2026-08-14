@@ -22,11 +22,13 @@ from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion
 from app.entities.product import Product
 from app.entities.product_input_image import ProductInputImage
+from app.entities.product_variant import ProductVariant
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.services.ports.token_issuer import AccessTokenClaims
 from app.shared.clock import utcnow
 from app.shared.ids import (
     TenantId,
+    new_catalog_image_slot_id,
     new_category_id,
     new_input_image_slot_id,
     new_product_id,
@@ -440,3 +442,67 @@ async def test_validating_an_input_image_over_http_reaches_ready() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
+
+
+async def test_creating_a_generation_request_over_http_reserves_quota_and_queues() -> None:
+    app, uow_factory, clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    category_id = new_category_id()
+    user_id = new_user_id()
+    spec_version = CategorySpecVersion.create(
+        tenant_id,
+        category_id,
+        version=1,
+        snapshot={
+            "attribute_definitions": [],
+            "variant_axes": [],
+            "input_image_slots": [],
+            "catalog_image_slots": [
+                {
+                    "id": str(new_catalog_image_slot_id()),
+                    "category_id": str(category_id),
+                    "key": "closeup",
+                    "label": "Closeup",
+                    "description": None,
+                    "position": 0,
+                    "aspect_ratio": "4:5",
+                    "target_width": 1080,
+                    "target_height": 1350,
+                    "is_required": True,
+                    "input_requirements": [],
+                }
+            ],
+        },
+        published_by=user_id,
+        now=_NOW,
+    )
+    await uow_factory.category_spec_versions.add(spec_version)
+    product = Product.create(
+        tenant_id, category_id, spec_version.id, attributes={}, created_by=user_id, now=_NOW
+    )
+    await uow_factory.products.add(product)
+    variant = ProductVariant.create(
+        tenant_id, product.id, axis_values={}, created_by=user_id, now=_NOW
+    )
+    await uow_factory.product_variants.add(variant)
+    await uow_factory.quota_reservations.ensure_period(
+        tenant_id,
+        period=clock.now().strftime("%Y-%m"),
+        metric="generation.images",
+        limit_value=10,
+        now=clock.now(),
+    )
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/products/{product.id}/generation-requests",
+            json={"variant_id": str(variant.id)},
+            headers=headers,
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "queued"
+    assert body["variant_id"] == str(variant.id)

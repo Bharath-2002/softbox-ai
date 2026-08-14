@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from app.api.deps.authorization import PrincipalDep, require_capability
 from app.bootstrap.di import (
     CaptureProductInputImageDep,
+    CreateGenerationRequestDep,
     CreateProductDep,
     CreateProductVariantDep,
     InputImageValidationAgentDep,
@@ -31,6 +32,7 @@ from app.bootstrap.di import (
     RecomputeProductReadinessDep,
 )
 from app.entities.capabilities import Capability
+from app.entities.generation_request import GenerationRequest
 from app.entities.product import Product
 from app.entities.product_input_image import ProductInputImage
 from app.entities.product_variant import ProductVariant
@@ -38,6 +40,7 @@ from app.shared.ids import (
     AssetId,
     CategoryId,
     CategorySpecVersionId,
+    GenerationRequestId,
     InputImageSlotId,
     ProductId,
     ProductInputImageId,
@@ -247,3 +250,47 @@ async def validate_input_image(
     assert principal.tenant_id is not None
     image = await agent.run(tenant_id=principal.tenant_id, image_id=image_id)
     return InputImageResponse.from_entity(image)
+
+
+class GenerationRequestResponse(BaseModel):
+    id: GenerationRequestId
+    product_id: ProductId
+    variant_id: ProductVariantId
+    status: str
+    created_at: datetime
+
+    @staticmethod
+    def from_entity(r: GenerationRequest) -> GenerationRequestResponse:
+        return GenerationRequestResponse(
+            id=r.id,
+            product_id=r.product_id,
+            variant_id=r.variant_id,
+            status=r.status.value,
+            created_at=r.created_at,
+        )
+
+
+class CreateGenerationRequestRequest(BaseModel):
+    variant_id: ProductVariantId
+
+
+@router.post(
+    "/products/{product_id}/generation-requests",
+    response_model=GenerationRequestResponse,
+    status_code=201,
+    dependencies=_manage,
+)
+async def create_generation_request(
+    product_id: ProductId,
+    body: CreateGenerationRequestRequest,
+    principal: PrincipalDep,
+    use_case: CreateGenerationRequestDep,
+) -> GenerationRequestResponse:
+    assert principal.tenant_id is not None
+    request = await use_case(
+        tenant_id=principal.tenant_id,
+        product_id=product_id,
+        variant_id=body.variant_id,
+        requested_by=principal.user_id,
+    )
+    return GenerationRequestResponse.from_entity(request)

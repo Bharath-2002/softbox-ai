@@ -35,6 +35,7 @@ from app.features.identity.refresh_session import RefreshSession
 from app.features.identity.start_impersonation import StartImpersonation
 from app.features.products.capture_product_input_image import CaptureProductInputImage
 from app.features.products.complete_input_image_validation import CompleteInputImageValidation
+from app.features.products.create_generation_request import CreateGenerationRequest
 from app.features.products.create_product import CreateProduct
 from app.features.products.create_product_variant import CreateProductVariant
 from app.features.products.list_products import ListProducts
@@ -359,6 +360,12 @@ def get_list_products(uow_factory: UowFactoryDep) -> ListProducts:
     return ListProducts(uow_factory)
 
 
+def get_create_generation_request(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CreateGenerationRequest:
+    return CreateGenerationRequest(uow_factory, clock)
+
+
 def get_start_input_image_validation(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> StartInputImageValidation:
@@ -478,6 +485,9 @@ CaptureProductInputImageDep = Annotated[
     CaptureProductInputImage, Depends(get_capture_product_input_image)
 ]
 ListProductsDep = Annotated[ListProducts, Depends(get_list_products)]
+CreateGenerationRequestDep = Annotated[
+    CreateGenerationRequest, Depends(get_create_generation_request)
+]
 InputImageValidationAgentDep = Annotated[
     InputImageValidationAgent, Depends(get_input_image_validation_agent)
 ]
