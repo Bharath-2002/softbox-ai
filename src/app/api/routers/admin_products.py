@@ -300,6 +300,7 @@ async def create_generation_request(
 
 class FanOutResponse(BaseModel):
     item_ids: list[GenerationItemId]
+    generation_request_status: str
 
 
 @router.post(
@@ -316,4 +317,6 @@ async def fan_out_generation_items(
     items = await use_case(
         tenant_id=principal.tenant_id, generation_request_id=generation_request_id
     )
-    return FanOutResponse(item_ids=[item.id for item in items])
+    # FanOutGenerationItems always calls mark_running() before returning -
+    # a successful return means the request left "queued", not a guess.
+    return FanOutResponse(item_ids=[item.id for item in items], generation_request_status="running")

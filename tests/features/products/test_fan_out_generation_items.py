@@ -10,7 +10,7 @@ from app.entities.category_spec_version import CategorySpecVersion
 from app.entities.generation_request import GenerationRequest
 from app.entities.image_slots import CatalogImageSlot, InputImageSlot
 from app.entities.product import Product
-from app.entities.product_input_image import ProductInputImage
+from app.entities.product_input_image import InputImageStatus, ProductInputImage
 from app.entities.product_variant import ProductVariant
 from app.features.products.fan_out_generation_items import FanOutGenerationItems
 from app.services.spec_snapshot import build_snapshot
@@ -43,6 +43,7 @@ async def _seed(
     *,
     with_default_template: bool = True,
     with_required_input: bool = True,
+    required_input_status: InputImageStatus = InputImageStatus.READY,
 ) -> tuple[TenantId, GenerationRequest]:
     tenant_id = new_tenant_id()
     category_id = new_category_id()
@@ -128,6 +129,12 @@ async def _seed(
             created_by=user_id,
             now=_NOW,
         )
+        if required_input_status in (InputImageStatus.READY, InputImageStatus.REJECTED):
+            image.start_validating(now=_NOW)
+        if required_input_status == InputImageStatus.READY:
+            image.mark_ready(now=_NOW)
+        elif required_input_status == InputImageStatus.REJECTED:
+            image.mark_rejected(reason="too blurry", now=_NOW)
         await uow_factory.product_input_images.add(image)
 
     return tenant_id, request
@@ -183,6 +190,22 @@ async def test_a_slot_with_no_default_analysed_template_is_rejected() -> None:
 async def test_a_missing_required_input_is_rejected() -> None:
     use_case, uow_factory = _use_case()
     tenant_id, request = await _seed(uow_factory, with_required_input=False)
+
+    with pytest.raises(ValidationError):
+        await use_case(tenant_id=tenant_id, generation_request_id=request.id)
+
+
+async def test_an_unvalidated_captured_input_does_not_count_as_present() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, request = await _seed(uow_factory, required_input_status=InputImageStatus.CAPTURED)
+
+    with pytest.raises(ValidationError):
+        await use_case(tenant_id=tenant_id, generation_request_id=request.id)
+
+
+async def test_a_rejected_input_does_not_count_as_present() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, request = await _seed(uow_factory, required_input_status=InputImageStatus.REJECTED)
 
     with pytest.raises(ValidationError):
         await use_case(tenant_id=tenant_id, generation_request_id=request.id)

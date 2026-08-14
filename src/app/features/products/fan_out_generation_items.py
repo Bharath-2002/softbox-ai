@@ -7,21 +7,36 @@ template (no per-variant template-choice mechanism exists yet — this is the
 open question `CreateGenerationRequest`'s docstring flagged, resolved here
 with the only real signal available, `CatalogTemplate.is_default`); resolves
 each of the slot's required input images via D12's resolution rule
-(`resolve_input_image`, variant image wins over the product's); composes the
-prompt (`prompt_composition.compose_prompt`); and writes a `PENDING`
-`generation_item` plus an outbox event so a relay can turn it into a
-`task_queue` job once the worker that would claim and execute it exists.
+(`resolve_input_image`, variant image wins over the product's) — filtered to
+`InputImageStatus.READY` first, the same bar `RecomputeProductReadiness`
+(M4) already set for "this input is actually usable"; a `captured`-but-
+unvalidated or `rejected` image must not silently count as present, the
+same class of bug a status filter left off would have let through here.
+Composes the prompt (`prompt_composition.compose_prompt`); and writes a
+`PENDING` `generation_item` plus an outbox event so a relay can turn it into
+a `task_queue` job once the worker that would claim and execute it exists.
 One outbox event **per item**, not one for the whole batch — the eventual
 worker claims and executes one `generation_item` per job (D19's "the queue
 executes one step"), so the unit the relay enqueues must already be
 per-item.
 
 A required catalog slot with no default analysed template, or a required
-input the product/variant never captured, is a real, actionable failure
-(`ValidationError`) — generation cannot silently skip a required slot and
-call the result complete. In both cases nothing is written: fan-out either
-fully succeeds for a request or writes nothing, never a partial set of
-items with the request stuck in `queued`.
+input the product/variant never captured (or never got past `validating`),
+is a real, actionable failure (`ValidationError`) — generation cannot
+silently skip a required slot and call the result complete. Against real
+Postgres, both failures leave nothing written: the whole `async with` block
+rolls back, so fan-out either fully succeeds for a request or writes
+nothing, never a partial item set with the request stuck in `queued`. (The
+in-memory fake used by this module's own tests has no such rollback — its
+single-required-slot test scenarios happen not to exercise a partial-write
+case, not a demonstration of the fake enforcing atomicity it doesn't have.)
+
+**Does not implement D12's recolour hex-injection** ("no photographed
+variant input -> inject colour + hex as a recolour instruction") even
+though, unlike `prompt_composition`, this use case *does* have
+`product_input_images` in hand — deferred rather than silently missed;
+`{{variant.colour}}` still substitutes to the plain axis value for every
+variant today, photographed or not.
 
 Moves the request to `running` on completion (`GenerationRequest.
 mark_running`) — the first real driver of that transition; every other
@@ -42,7 +57,7 @@ from uuid import UUID
 
 from app.entities.catalog_template import CatalogTemplate
 from app.entities.generation_item import GenerationItem
-from app.entities.product_input_image import ProductInputImage
+from app.entities.product_input_image import InputImageStatus, ProductInputImage
 from app.services.input_image_resolution import resolve_input_image
 from app.services.ports.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from app.services.prompt_composition import COMPOSITION_VERSION, compose_prompt, merge_attributes
@@ -96,6 +111,7 @@ class FanOutGenerationItems:
             snapshot = spec_version.snapshot
 
             captured_images = await uow.product_input_images.list_for_product(tenant_id, product.id)
+            ready_images = [i for i in captured_images if i.status == InputImageStatus.READY]
             merged_attributes = merge_attributes(product.attributes, variant.attributes)
 
             now = self._clock.now()
@@ -106,7 +122,7 @@ class FanOutGenerationItems:
 
                 template = await self._pick_default_template(uow, tenant_id, slot)
                 input_asset_ids = self._resolve_required_inputs(
-                    slot, captured_images, variant_id=variant.id
+                    slot, ready_images, variant_id=variant.id
                 )
                 prompt_rendered = compose_prompt(
                     snapshot,
