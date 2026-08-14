@@ -24,17 +24,20 @@ from pydantic import BaseModel
 from app.api.deps.authorization import PrincipalDep, require_capability
 from app.bootstrap.di import (
     CreateProductDep,
+    CreateProductVariantDep,
     InputImageValidationAgentDep,
     RecomputeProductReadinessDep,
 )
 from app.entities.capabilities import Capability
 from app.entities.product import Product
 from app.entities.product_input_image import ProductInputImage
+from app.entities.product_variant import ProductVariant
 from app.shared.ids import (
     CategoryId,
     CategorySpecVersionId,
     ProductId,
     ProductInputImageId,
+    ProductVariantId,
 )
 
 router = APIRouter()
@@ -99,6 +102,62 @@ async def recompute_product_readiness(
     assert principal.tenant_id is not None
     product = await use_case(tenant_id=principal.tenant_id, product_id=product_id)
     return ProductResponse.from_entity(product)
+
+
+class ProductVariantResponse(BaseModel):
+    id: ProductVariantId
+    product_id: ProductId
+    sku: str | None
+    axis_values: dict[str, str]
+    attributes: dict[str, Any]
+    status: str
+    is_default: bool
+
+    @staticmethod
+    def from_entity(v: ProductVariant) -> ProductVariantResponse:
+        return ProductVariantResponse(
+            id=v.id,
+            product_id=v.product_id,
+            sku=v.sku,
+            axis_values=v.axis_values,
+            attributes=v.attributes,
+            status=v.status.value,
+            is_default=v.is_default,
+        )
+
+
+class CreateProductVariantRequest(BaseModel):
+    axis_values: dict[str, str]
+    sku: str | None = None
+    attributes: dict[str, Any] = {}
+    is_default: bool = False
+    position: int = 0
+
+
+@router.post(
+    "/products/{product_id}/variants",
+    response_model=ProductVariantResponse,
+    status_code=201,
+    dependencies=_manage,
+)
+async def create_product_variant(
+    product_id: ProductId,
+    body: CreateProductVariantRequest,
+    principal: PrincipalDep,
+    use_case: CreateProductVariantDep,
+) -> ProductVariantResponse:
+    assert principal.tenant_id is not None
+    variant = await use_case(
+        tenant_id=principal.tenant_id,
+        product_id=product_id,
+        axis_values=body.axis_values,
+        created_by=principal.user_id,
+        sku=body.sku,
+        attributes=body.attributes,
+        is_default=body.is_default,
+        position=body.position,
+    )
+    return ProductVariantResponse.from_entity(variant)
 
 
 class InputImageResponse(BaseModel):

@@ -17,6 +17,8 @@ from app.bootstrap.app import create_app
 from app.bootstrap.di import get_clock, get_uow_factory
 from app.bootstrap.settings import Settings
 from app.entities.asset import Asset, AssetKind
+from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
+from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion
 from app.entities.product import Product
 from app.entities.product_input_image import ProductInputImage
@@ -170,6 +172,118 @@ def _sharp_jpeg_bytes(size: int = 800) -> bytes:
     buf = io.BytesIO()
     image.convert("RGB").save(buf, format="JPEG")
     return buf.getvalue()
+
+
+async def test_creating_a_product_over_http_promotes_semantic_columns() -> None:
+    app, uow_factory, _clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    user_id = new_user_id()
+    category = Category.create(
+        tenant_id, key="dresses", name="Dresses", slug="dresses", parent=None, now=_NOW
+    )
+    await uow_factory.attribute_definitions.add(
+        AttributeDefinition.create(
+            tenant_id,
+            category.id,
+            key="product_title",
+            label="Title",
+            data_type=AttributeDataType.TEXT,
+            semantic_role=SemanticRole.TITLE,
+            is_required=True,
+            now=_NOW,
+        )
+    )
+    spec_version = CategorySpecVersion.create(
+        tenant_id,
+        category.id,
+        version=1,
+        snapshot={
+            "attribute_definitions": [],
+            "variant_axes": [],
+            "input_image_slots": [],
+            "catalog_image_slots": [],
+        },
+        published_by=user_id,
+        now=_NOW,
+    )
+    await uow_factory.category_spec_versions.add(spec_version)
+    category.current_spec_version = 1
+    await uow_factory.categories.add(category)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post(
+            "/api/v1/admin/products",
+            json={"category_id": str(category.id), "attributes": {"product_title": "A Dress"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["title"] == "A Dress"
+    assert body["status"] == "draft"
+
+
+async def test_creating_a_product_variant_over_http_validates_axis_values() -> None:
+    app, uow_factory, _clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    category_id = new_category_id()
+    user_id = new_user_id()
+    spec_version = CategorySpecVersion.create(
+        tenant_id,
+        category_id,
+        version=1,
+        snapshot={
+            "attribute_definitions": [],
+            "variant_axes": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "category_id": str(category_id),
+                    "key": "colour",
+                    "label": "Colour",
+                    "position": 0,
+                    "affects_imagery": True,
+                    "values": [
+                        {
+                            "id": str(uuid.uuid4()),
+                            "value": "maroon",
+                            "label": "Maroon",
+                            "metadata": {},
+                        }
+                    ],
+                }
+            ],
+            "input_image_slots": [],
+            "catalog_image_slots": [],
+        },
+        published_by=user_id,
+        now=_NOW,
+    )
+    await uow_factory.category_spec_versions.add(spec_version)
+    product = Product.create(
+        tenant_id, category_id, spec_version.id, attributes={}, created_by=user_id, now=_NOW
+    )
+    await uow_factory.products.add(product)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        ok = await http.post(
+            f"/api/v1/admin/products/{product.id}/variants",
+            json={"axis_values": {"colour": "maroon"}},
+            headers=headers,
+        )
+        rejected = await http.post(
+            f"/api/v1/admin/products/{product.id}/variants",
+            json={"axis_values": {"colour": "gold"}},
+            headers=headers,
+        )
+
+    assert ok.status_code == 201
+    assert ok.json()["axis_values"] == {"colour": "maroon"}
+    assert rejected.status_code == 422
+    assert rejected.json()["code"] == "validation_error"
 
 
 async def test_validating_an_input_image_over_http_reaches_ready() -> None:
