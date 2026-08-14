@@ -48,6 +48,7 @@ from app.infrastructure.persistence.identity_repository import SqlIdentityReposi
 from app.infrastructure.persistence.input_image_slot_repository import (
     SqlInputImageSlotRepository,
 )
+from app.infrastructure.persistence.outbox_event_repository import SqlOutboxEventRepository
 from app.infrastructure.persistence.platform_admin_repository import SqlPlatformAdminRepository
 from app.infrastructure.persistence.product_input_image_repository import (
     SqlProductInputImageRepository,
@@ -80,6 +81,7 @@ from app.services.ports.category_spec_version_repository import CategorySpecVers
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.input_image_slot_repository import InputImageSlotRepository
+from app.services.ports.outbox_event_repository import OutboxEventRepository
 from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.product_input_image_repository import ProductInputImageRepository
 from app.services.ports.product_repository import ProductRepository
@@ -134,6 +136,7 @@ class SqlUnitOfWork:
         self._products: SqlProductRepository | None = None
         self._product_variants: SqlProductVariantRepository | None = None
         self._product_input_images: SqlProductInputImageRepository | None = None
+        self._outbox_events: SqlOutboxEventRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -271,6 +274,12 @@ class SqlUnitOfWork:
             self._product_input_images = SqlProductInputImageRepository(self.session)
         return self._product_input_images
 
+    @property
+    def outbox_events(self) -> OutboxEventRepository:
+        if self._outbox_events is None:
+            self._outbox_events = SqlOutboxEventRepository(self.session)
+        return self._outbox_events
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -319,6 +328,7 @@ class SqlUnitOfWork:
             self._products = None
             self._product_variants = None
             self._product_input_images = None
+            self._outbox_events = None
 
 
 def make_unit_of_work_factory(

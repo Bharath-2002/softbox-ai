@@ -491,6 +491,20 @@ idempotency_keys_table = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
+# No entity class - a stored delivery ticket, not a rich domain object.
+# Queried via Core directly by SqlOutboxEventRepository, same shape as
+# idempotency_keys_table above.
+outbox_events_table = Table(
+    "outbox_events",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("event_type", Text(), nullable=False),
+    Column("payload", JSONB(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("published_at", DateTime(timezone=True), nullable=True),
+)
+
 # No entity class - a counter, not a rich domain object. Queried via Core
 # directly by SqlRateLimiter.
 rate_limit_windows_table = Table(
