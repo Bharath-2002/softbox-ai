@@ -24,6 +24,7 @@ from tests.fakes.catalog_slot_input_requirement_repository import (
 from tests.fakes.catalog_template_repository import InMemoryCatalogTemplateRepository
 from tests.fakes.category_repository import InMemoryCategoryRepository
 from tests.fakes.category_spec_version_repository import InMemoryCategorySpecVersionRepository
+from tests.fakes.generation_request_repository import InMemoryGenerationRequestRepository
 from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
 from tests.fakes.identity_repository import InMemoryIdentityRepository
 from tests.fakes.input_image_slot_repository import InMemoryInputImageSlotRepository
@@ -72,6 +73,7 @@ class FakeUnitOfWork:
         task_queue: InMemoryTaskQueue,
         tenants: InMemoryTenantRepository,
         quota_reservations: InMemoryQuotaReservationRepository,
+        generation_requests: InMemoryGenerationRequestRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -100,6 +102,7 @@ class FakeUnitOfWork:
         self.task_queue = task_queue
         self.tenants = tenants
         self.quota_reservations = quota_reservations
+        self.generation_requests = generation_requests
         self.committed = False
         self.rolled_back = False
 
@@ -150,6 +153,7 @@ class FakeUnitOfWorkFactory:
         self.task_queue = InMemoryTaskQueue()
         self.tenants = InMemoryTenantRepository()
         self.quota_reservations = InMemoryQuotaReservationRepository()
+        self.generation_requests = InMemoryGenerationRequestRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -178,6 +182,7 @@ class FakeUnitOfWorkFactory:
             task_queue=self.task_queue,
             tenants=self.tenants,
             quota_reservations=self.quota_reservations,
+            generation_requests=self.generation_requests,
             tenant_id=tenant_id,
         )
 

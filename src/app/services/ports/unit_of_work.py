@@ -45,6 +45,7 @@ from app.services.ports.catalog_slot_input_requirement_repository import (
 from app.services.ports.catalog_template_repository import CatalogTemplateRepository
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.category_spec_version_repository import CategorySpecVersionRepository
+from app.services.ports.generation_request_repository import GenerationRequestRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
 from app.services.ports.identity_repository import IdentityRepository
 from app.services.ports.input_image_slot_repository import InputImageSlotRepository
@@ -140,6 +141,9 @@ class UnitOfWork(Protocol):
 
     @property
     def quota_reservations(self) -> QuotaReservationRepository: ...
+
+    @property
+    def generation_requests(self) -> GenerationRequestRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

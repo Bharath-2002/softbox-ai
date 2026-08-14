@@ -55,6 +55,7 @@ from app.entities.catalog_slot_input_requirement import CatalogSlotInputRequirem
 from app.entities.catalog_template import CatalogTemplate, TemplateKind, TemplateStatus
 from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion, SpecVersionStatus
+from app.entities.generation_request import GenerationRequest, GenerationRequestStatus
 from app.entities.identity import Identity
 from app.entities.image_slots import CatalogImageSlot, InputImageSlot
 from app.entities.product import Product, ProductStatus
@@ -142,6 +143,14 @@ _product_status_type = Enum(
 _input_image_status_type = Enum(
     InputImageStatus,
     name="product_input_image_status",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_generation_request_status_type = Enum(
+    GenerationRequestStatus,
+    name="generation_request_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -480,6 +489,22 @@ product_input_images_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+generation_requests_table = Table(
+    "generation_requests",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("product_id", Uuid(), nullable=False),
+    Column("variant_id", Uuid(), nullable=False),
+    Column("spec_version_id", Uuid(), nullable=False),
+    Column("status", _generation_request_status_type, nullable=False),
+    Column("settings_snapshot", JSONB(), nullable=False),
+    Column("quota_reservation_id", Uuid(), nullable=True),
+    Column("requested_by", Uuid(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True), nullable=True),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -597,4 +622,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(Product, products_table)
     mapper_registry.map_imperatively(ProductVariant, product_variants_table)
     mapper_registry.map_imperatively(ProductInputImage, product_input_images_table)
+    mapper_registry.map_imperatively(GenerationRequest, generation_requests_table)
     _mapped = True
