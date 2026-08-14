@@ -32,6 +32,7 @@ from tests.fakes.platform_admin_repository import InMemoryPlatformAdminRepositor
 from tests.fakes.product_input_image_repository import InMemoryProductInputImageRepository
 from tests.fakes.product_repository import InMemoryProductRepository
 from tests.fakes.product_variant_repository import InMemoryProductVariantRepository
+from tests.fakes.quota_reservation_repository import InMemoryQuotaReservationRepository
 from tests.fakes.session_repository import InMemorySessionRepository
 from tests.fakes.settings_repository import InMemorySettingsRepository
 from tests.fakes.task_queue import InMemoryTaskQueue
@@ -70,6 +71,7 @@ class FakeUnitOfWork:
         outbox_events: InMemoryOutboxEventRepository,
         task_queue: InMemoryTaskQueue,
         tenants: InMemoryTenantRepository,
+        quota_reservations: InMemoryQuotaReservationRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -97,6 +99,7 @@ class FakeUnitOfWork:
         self.outbox_events = outbox_events
         self.task_queue = task_queue
         self.tenants = tenants
+        self.quota_reservations = quota_reservations
         self.committed = False
         self.rolled_back = False
 
@@ -146,6 +149,7 @@ class FakeUnitOfWorkFactory:
         self.outbox_events = InMemoryOutboxEventRepository()
         self.task_queue = InMemoryTaskQueue()
         self.tenants = InMemoryTenantRepository()
+        self.quota_reservations = InMemoryQuotaReservationRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -173,6 +177,7 @@ class FakeUnitOfWorkFactory:
             outbox_events=self.outbox_events,
             task_queue=self.task_queue,
             tenants=self.tenants,
+            quota_reservations=self.quota_reservations,
             tenant_id=tenant_id,
         )
 

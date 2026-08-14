@@ -57,6 +57,9 @@ from app.infrastructure.persistence.product_repository import SqlProductReposito
 from app.infrastructure.persistence.product_variant_repository import (
     SqlProductVariantRepository,
 )
+from app.infrastructure.persistence.quota_reservation_repository import (
+    SqlQuotaReservationRepository,
+)
 from app.infrastructure.persistence.session_repository import SqlSessionRepository
 from app.infrastructure.persistence.settings_repository import SqlSettingsRepository
 from app.infrastructure.persistence.task_queue import SqlTaskQueue
@@ -88,6 +91,7 @@ from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.product_input_image_repository import ProductInputImageRepository
 from app.services.ports.product_repository import ProductRepository
 from app.services.ports.product_variant_repository import ProductVariantRepository
+from app.services.ports.quota_reservation_repository import QuotaReservationRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
 from app.services.ports.task_queue import TaskQueue
@@ -143,6 +147,7 @@ class SqlUnitOfWork:
         self._outbox_events: SqlOutboxEventRepository | None = None
         self._task_queue: SqlTaskQueue | None = None
         self._tenants: SqlTenantRepository | None = None
+        self._quota_reservations: SqlQuotaReservationRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -298,6 +303,12 @@ class SqlUnitOfWork:
             self._tenants = SqlTenantRepository(self.session)
         return self._tenants
 
+    @property
+    def quota_reservations(self) -> QuotaReservationRepository:
+        if self._quota_reservations is None:
+            self._quota_reservations = SqlQuotaReservationRepository(self.session)
+        return self._quota_reservations
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -349,6 +360,7 @@ class SqlUnitOfWork:
             self._outbox_events = None
             self._task_queue = None
             self._tenants = None
+            self._quota_reservations = None
 
 
 def make_unit_of_work_factory(

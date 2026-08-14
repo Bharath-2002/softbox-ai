@@ -542,6 +542,22 @@ task_queue_jobs_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+# No entity class - a counter, not a rich domain object (D24). Queried via
+# Core directly by SqlQuotaReservationRepository.
+quota_reservations_table = Table(
+    "quota_reservations",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("period", Text(), nullable=False),
+    Column("metric", Text(), nullable=False),
+    Column("limit_value", Integer(), nullable=False),
+    Column("reserved", Integer(), nullable=False),
+    Column("committed", Integer(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a counter, not a rich domain object. Queried via Core
 # directly by SqlRateLimiter.
 rate_limit_windows_table = Table(

@@ -53,6 +53,7 @@ from app.services.ports.platform_admin_repository import PlatformAdminRepository
 from app.services.ports.product_input_image_repository import ProductInputImageRepository
 from app.services.ports.product_repository import ProductRepository
 from app.services.ports.product_variant_repository import ProductVariantRepository
+from app.services.ports.quota_reservation_repository import QuotaReservationRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
 from app.services.ports.task_queue import TaskQueue
@@ -136,6 +137,9 @@ class UnitOfWork(Protocol):
 
     @property
     def tenants(self) -> TenantRepository: ...
+
+    @property
+    def quota_reservations(self) -> QuotaReservationRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""
