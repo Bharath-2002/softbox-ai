@@ -21,6 +21,7 @@ from tests.fakes.catalog_image_slot_repository import InMemoryCatalogImageSlotRe
 from tests.fakes.catalog_slot_input_requirement_repository import (
     InMemoryCatalogSlotInputRequirementRepository,
 )
+from tests.fakes.catalog_template_repository import InMemoryCatalogTemplateRepository
 from tests.fakes.category_repository import InMemoryCategoryRepository
 from tests.fakes.category_spec_version_repository import InMemoryCategorySpecVersionRepository
 from tests.fakes.idempotency_repository import InMemoryIdempotencyRepository
@@ -56,6 +57,7 @@ class FakeUnitOfWork:
         category_spec_versions: InMemoryCategorySpecVersionRepository,
         settings: InMemorySettingsRepository,
         assets: InMemoryAssetRepository,
+        catalog_templates: InMemoryCatalogTemplateRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -76,6 +78,7 @@ class FakeUnitOfWork:
         self.category_spec_versions = category_spec_versions
         self.settings = settings
         self.assets = assets
+        self.catalog_templates = catalog_templates
         self.committed = False
         self.rolled_back = False
 
@@ -118,6 +121,7 @@ class FakeUnitOfWorkFactory:
         self.category_spec_versions = InMemoryCategorySpecVersionRepository()
         self.settings = InMemorySettingsRepository()
         self.assets = InMemoryAssetRepository()
+        self.catalog_templates = InMemoryCatalogTemplateRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -138,6 +142,7 @@ class FakeUnitOfWorkFactory:
             category_spec_versions=self.category_spec_versions,
             settings=self.settings,
             assets=self.assets,
+            catalog_templates=self.catalog_templates,
             tenant_id=tenant_id,
         )
 

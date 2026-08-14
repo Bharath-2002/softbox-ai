@@ -36,6 +36,9 @@ from app.infrastructure.persistence.catalog_image_slot_repository import (
 from app.infrastructure.persistence.catalog_slot_input_requirement_repository import (
     SqlCatalogSlotInputRequirementRepository,
 )
+from app.infrastructure.persistence.catalog_template_repository import (
+    SqlCatalogTemplateRepository,
+)
 from app.infrastructure.persistence.category_repository import SqlCategoryRepository
 from app.infrastructure.persistence.category_spec_version_repository import (
     SqlCategorySpecVersionRepository,
@@ -64,6 +67,7 @@ from app.services.ports.catalog_image_slot_repository import CatalogImageSlotRep
 from app.services.ports.catalog_slot_input_requirement_repository import (
     CatalogSlotInputRequirementRepository,
 )
+from app.services.ports.catalog_template_repository import CatalogTemplateRepository
 from app.services.ports.category_repository import CategoryRepository
 from app.services.ports.category_spec_version_repository import CategorySpecVersionRepository
 from app.services.ports.idempotency_repository import IdempotencyRepository
@@ -116,6 +120,7 @@ class SqlUnitOfWork:
         self._category_spec_versions: SqlCategorySpecVersionRepository | None = None
         self._settings: SqlSettingsRepository | None = None
         self._assets: SqlAssetRepository | None = None
+        self._catalog_templates: SqlCatalogTemplateRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -229,6 +234,12 @@ class SqlUnitOfWork:
             self._assets = SqlAssetRepository(self.session)
         return self._assets
 
+    @property
+    def catalog_templates(self) -> CatalogTemplateRepository:
+        if self._catalog_templates is None:
+            self._catalog_templates = SqlCatalogTemplateRepository(self.session)
+        return self._catalog_templates
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -273,6 +284,7 @@ class SqlUnitOfWork:
             self._category_spec_versions = None
             self._settings = None
             self._assets = None
+            self._catalog_templates = None
 
 
 def make_unit_of_work_factory(

@@ -52,6 +52,7 @@ from sqlalchemy.orm import registry
 from app.entities.asset import Asset, AssetKind
 from app.entities.attribute_definition import AttributeDataType, AttributeDefinition, SemanticRole
 from app.entities.catalog_slot_input_requirement import CatalogSlotInputRequirement
+from app.entities.catalog_template import CatalogTemplate, TemplateKind, TemplateStatus
 from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion, SpecVersionStatus
 from app.entities.identity import Identity
@@ -106,6 +107,22 @@ _setting_scope_type = Enum(
 _asset_kind_type = Enum(
     AssetKind,
     name="asset_kind",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_template_kind_type = Enum(
+    TemplateKind,
+    name="catalog_template_kind",
+    native_enum=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+_template_status_type = Enum(
+    TemplateStatus,
+    name="catalog_template_status",
     native_enum=False,
     values_callable=lambda enum_cls: [member.value for member in enum_cls],
     validate_strings=True,
@@ -351,6 +368,30 @@ assets_table = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
+catalog_templates_table = Table(
+    "catalog_templates",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("catalog_image_slot_id", Uuid(), nullable=False),
+    Column("name", Text(), nullable=False),
+    Column("version", Integer(), nullable=False),
+    Column("is_default", Boolean(), nullable=False),
+    Column("position", Integer(), nullable=False),
+    Column("kind", _template_kind_type, nullable=False),
+    Column("source_asset_id", Uuid(), nullable=True),
+    Column("status", _template_status_type, nullable=False),
+    Column("analysis", JSONB(), nullable=True),
+    Column("prompt_template", Text(), nullable=True),
+    Column("prompt_version", Integer(), nullable=True),
+    Column("analysis_model", Text(), nullable=True),
+    Column("analysed_at", DateTime(timezone=True), nullable=True),
+    Column("analysis_error", Text(), nullable=True),
+    Column("created_by", Uuid(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -414,4 +455,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(CategorySpecVersion, category_spec_versions_table)
     mapper_registry.map_imperatively(Setting, settings_table)
     mapper_registry.map_imperatively(Asset, assets_table)
+    mapper_registry.map_imperatively(CatalogTemplate, catalog_templates_table)
     _mapped = True
