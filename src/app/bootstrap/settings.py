@@ -84,6 +84,19 @@ class Settings(BaseSettings):
     smtp_password: SecretStr = Field(default=SecretStr(""))
     email_from: str = "Softbox AI <no-reply@example.com>"
 
+    # ── Object storage (D17) ────────────────────────────────────────────────
+    # "local" (filesystem, this process serving its own presigned URLs) is
+    # the only backend today - no S3/R2 bucket or credentials are configured
+    # anywhere in this repo (see CHECKLIST.md's M3 STATE entry). Real object
+    # storage is a "stop and ask" per CLAUDE.md - a new external dependency -
+    # flagged there rather than guessed at here.
+    object_storage_backend: Literal["local"] = "local"
+    object_storage_local_root: str = "./.data/object-storage"
+    object_storage_public_base_url: str = "http://localhost:8000"
+    object_storage_signing_key: SecretStr = Field(
+        default=SecretStr("dev-only-object-storage-signing-key-not-for-production-use"),
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def is_production(self) -> bool:

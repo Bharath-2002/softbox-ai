@@ -24,6 +24,7 @@ from app.infrastructure.observability.logging import configure_logging
 from app.infrastructure.persistence.database import create_engine, create_session_factory, ping
 from app.infrastructure.persistence.rate_limiter import SqlRateLimiter
 from app.infrastructure.persistence.unit_of_work import make_unit_of_work_factory
+from app.infrastructure.storage.local_object_storage import LocalObjectStorage
 from app.shared.clock import SystemClock
 from app.shared.logging import get_logger
 
@@ -112,6 +113,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     else:
         app.state.email_sender = ConsoleEmailSender()
+
+    # Read by app.api.deps.object_storage.get_object_storage - same pattern.
+    # "local" (the only backend today) never touches a real bucket - see
+    # LocalObjectStorage and the settings field's docstring.
+    app.state.object_storage = LocalObjectStorage(
+        root=settings.object_storage_local_root,
+        base_url=settings.object_storage_public_base_url,
+        signing_key=settings.object_storage_signing_key.get_secret_value(),
+    )
 
     # Read by app.bootstrap.di.get_google_identity_provider. Constructing
     # this never makes a network call (Authlib's OAuth().register() only
