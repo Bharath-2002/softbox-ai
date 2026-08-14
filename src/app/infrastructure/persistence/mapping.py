@@ -505,6 +505,26 @@ outbox_events_table = Table(
     Column("published_at", DateTime(timezone=True), nullable=True),
 )
 
+# No entity class - a queue row, not a rich domain object. Queried via Core
+# directly by SqlTaskQueue, same shape as outbox_events_table above.
+task_queue_jobs_table = Table(
+    "task_queue_jobs",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("job_type", Text(), nullable=False),
+    Column("payload", JSONB(), nullable=False),
+    Column("status", Text(), nullable=False),
+    Column("attempts", Integer(), nullable=False),
+    Column("max_attempts", Integer(), nullable=False),
+    Column("run_at", DateTime(timezone=True), nullable=False),
+    Column("claimed_at", DateTime(timezone=True), nullable=True),
+    Column("claimed_by", Text(), nullable=True),
+    Column("last_error", Text(), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a counter, not a rich domain object. Queried via Core
 # directly by SqlRateLimiter.
 rate_limit_windows_table = Table(

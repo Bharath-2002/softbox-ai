@@ -34,6 +34,7 @@ from tests.fakes.product_repository import InMemoryProductRepository
 from tests.fakes.product_variant_repository import InMemoryProductVariantRepository
 from tests.fakes.session_repository import InMemorySessionRepository
 from tests.fakes.settings_repository import InMemorySettingsRepository
+from tests.fakes.task_queue import InMemoryTaskQueue
 from tests.fakes.tenant_membership_repository import InMemoryTenantMembershipRepository
 from tests.fakes.user_repository import InMemoryUserRepository
 from tests.fakes.variant_axis_repository import InMemoryVariantAxisRepository
@@ -66,6 +67,7 @@ class FakeUnitOfWork:
         product_variants: InMemoryProductVariantRepository,
         product_input_images: InMemoryProductInputImageRepository,
         outbox_events: InMemoryOutboxEventRepository,
+        task_queue: InMemoryTaskQueue,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -91,6 +93,7 @@ class FakeUnitOfWork:
         self.product_variants = product_variants
         self.product_input_images = product_input_images
         self.outbox_events = outbox_events
+        self.task_queue = task_queue
         self.committed = False
         self.rolled_back = False
 
@@ -138,6 +141,7 @@ class FakeUnitOfWorkFactory:
         self.product_variants = InMemoryProductVariantRepository()
         self.product_input_images = InMemoryProductInputImageRepository()
         self.outbox_events = InMemoryOutboxEventRepository()
+        self.task_queue = InMemoryTaskQueue()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -163,6 +167,7 @@ class FakeUnitOfWorkFactory:
             product_variants=self.product_variants,
             product_input_images=self.product_input_images,
             outbox_events=self.outbox_events,
+            task_queue=self.task_queue,
             tenant_id=tenant_id,
         )
 

@@ -59,6 +59,7 @@ from app.infrastructure.persistence.product_variant_repository import (
 )
 from app.infrastructure.persistence.session_repository import SqlSessionRepository
 from app.infrastructure.persistence.settings_repository import SqlSettingsRepository
+from app.infrastructure.persistence.task_queue import SqlTaskQueue
 from app.infrastructure.persistence.tenant_membership_repository import (
     SqlTenantMembershipRepository,
 )
@@ -88,6 +89,7 @@ from app.services.ports.product_repository import ProductRepository
 from app.services.ports.product_variant_repository import ProductVariantRepository
 from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
+from app.services.ports.task_queue import TaskQueue
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.user_repository import UserRepository
 from app.services.ports.variant_axis_repository import VariantAxisRepository
@@ -137,6 +139,7 @@ class SqlUnitOfWork:
         self._product_variants: SqlProductVariantRepository | None = None
         self._product_input_images: SqlProductInputImageRepository | None = None
         self._outbox_events: SqlOutboxEventRepository | None = None
+        self._task_queue: SqlTaskQueue | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -280,6 +283,12 @@ class SqlUnitOfWork:
             self._outbox_events = SqlOutboxEventRepository(self.session)
         return self._outbox_events
 
+    @property
+    def task_queue(self) -> TaskQueue:
+        if self._task_queue is None:
+            self._task_queue = SqlTaskQueue(self.session)
+        return self._task_queue
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -329,6 +338,7 @@ class SqlUnitOfWork:
             self._product_variants = None
             self._product_input_images = None
             self._outbox_events = None
+            self._task_queue = None
 
 
 def make_unit_of_work_factory(
