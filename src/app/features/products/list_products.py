@@ -32,11 +32,11 @@ class ListProducts:
                 tenant_id, category_id, after=after, limit=limit + 1
             )
 
-        has_more = len(rows) > limit
-        items = rows[:limit]
-        next_cursor = (
-            encode_cursor(Cursor(sort_key=items[-1].created_at.isoformat(), id=items[-1].id))
-            if has_more and items
-            else None
-        )
-        return Page(items=items, next_cursor=next_cursor)
+            has_more = len(rows) > limit
+            items = rows[:limit]
+            next_cursor = (
+                encode_cursor(Cursor(sort_key=items[-1].created_at.isoformat(), id=items[-1].id))
+                if has_more and items
+                else None
+            )
+            return Page(items=items, next_cursor=next_cursor)
