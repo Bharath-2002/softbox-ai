@@ -33,6 +33,7 @@ from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
 from app.features.identity.start_impersonation import StartImpersonation
+from app.features.products.capture_product_input_image import CaptureProductInputImage
 from app.features.products.complete_input_image_validation import CompleteInputImageValidation
 from app.features.products.create_product import CreateProduct
 from app.features.products.create_product_variant import CreateProductVariant
@@ -347,6 +348,12 @@ def get_create_product_variant(uow_factory: UowFactoryDep, clock: ClockDep) -> C
     return CreateProductVariant(uow_factory, clock)
 
 
+def get_capture_product_input_image(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CaptureProductInputImage:
+    return CaptureProductInputImage(uow_factory, clock)
+
+
 def get_start_input_image_validation(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> StartInputImageValidation:
@@ -462,6 +469,9 @@ RecomputeProductReadinessDep = Annotated[
 ]
 CreateProductDep = Annotated[CreateProduct, Depends(get_create_product)]
 CreateProductVariantDep = Annotated[CreateProductVariant, Depends(get_create_product_variant)]
+CaptureProductInputImageDep = Annotated[
+    CaptureProductInputImage, Depends(get_capture_product_input_image)
+]
 InputImageValidationAgentDep = Annotated[
     InputImageValidationAgent, Depends(get_input_image_validation_agent)
 ]

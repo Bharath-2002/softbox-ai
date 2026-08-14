@@ -286,6 +286,72 @@ async def test_creating_a_product_variant_over_http_validates_axis_values() -> N
     assert rejected.json()["code"] == "validation_error"
 
 
+async def test_capturing_a_product_input_image_over_http() -> None:
+    app, uow_factory, _clock, codec, _storage = _build()
+    tenant_id_str = str(new_tenant_id())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    category_id = new_category_id()
+    user_id = new_user_id()
+    slot_id = new_input_image_slot_id()
+    spec_version = CategorySpecVersion.create(
+        tenant_id,
+        category_id,
+        version=1,
+        snapshot={
+            "attribute_definitions": [],
+            "variant_axes": [],
+            "input_image_slots": [
+                {
+                    "id": str(slot_id),
+                    "category_id": str(category_id),
+                    "key": "front",
+                    "label": "Front",
+                    "description": None,
+                    "capture_guidance": None,
+                    "example_asset_id": None,
+                    "normalisation": {},
+                    "is_required": True,
+                    "position": 0,
+                }
+            ],
+            "catalog_image_slots": [],
+        },
+        published_by=user_id,
+        now=_NOW,
+    )
+    await uow_factory.category_spec_versions.add(spec_version)
+    product = Product.create(
+        tenant_id, category_id, spec_version.id, attributes={}, created_by=user_id, now=_NOW
+    )
+    await uow_factory.products.add(product)
+    asset = Asset.create(
+        tenant_id,
+        storage_key=f"tenants/x/input/{uuid.uuid4()}.jpg",
+        sha256=uuid.uuid4().hex + uuid.uuid4().hex,
+        mime="image/jpeg",
+        width=1080,
+        height=1350,
+        bytes_=204_800,
+        kind=AssetKind.INPUT,
+        source="upload",
+        now=_NOW,
+    )
+    await uow_factory.assets.add(asset)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/products/{product.id}/input-images",
+            json={"input_image_slot_id": str(slot_id), "asset_id": str(asset.id)},
+            headers=headers,
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "captured"
+    assert body["asset_id"] == str(asset.id)
+
+
 async def test_validating_an_input_image_over_http_reaches_ready() -> None:
     app, uow_factory, _clock, codec, storage = _build()
     tenant_id_str = str(new_tenant_id())

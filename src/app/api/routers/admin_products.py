@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from app.api.deps.authorization import PrincipalDep, require_capability
 from app.bootstrap.di import (
+    CaptureProductInputImageDep,
     CreateProductDep,
     CreateProductVariantDep,
     InputImageValidationAgentDep,
@@ -33,8 +34,10 @@ from app.entities.product import Product
 from app.entities.product_input_image import ProductInputImage
 from app.entities.product_variant import ProductVariant
 from app.shared.ids import (
+    AssetId,
     CategoryId,
     CategorySpecVersionId,
+    InputImageSlotId,
     ProductId,
     ProductInputImageId,
     ProductVariantId,
@@ -162,14 +165,54 @@ async def create_product_variant(
 
 class InputImageResponse(BaseModel):
     id: ProductInputImageId
+    product_id: ProductId
+    variant_id: ProductVariantId | None
+    input_image_slot_id: InputImageSlotId
+    asset_id: AssetId
     status: str
     rejection_reason: str | None
 
     @staticmethod
     def from_entity(i: ProductInputImage) -> InputImageResponse:
         return InputImageResponse(
-            id=i.id, status=i.status.value, rejection_reason=i.rejection_reason
+            id=i.id,
+            product_id=i.product_id,
+            variant_id=i.variant_id,
+            input_image_slot_id=i.input_image_slot_id,
+            asset_id=i.asset_id,
+            status=i.status.value,
+            rejection_reason=i.rejection_reason,
         )
+
+
+class CaptureProductInputImageRequest(BaseModel):
+    input_image_slot_id: InputImageSlotId
+    asset_id: AssetId
+    variant_id: ProductVariantId | None = None
+
+
+@router.post(
+    "/products/{product_id}/input-images",
+    response_model=InputImageResponse,
+    status_code=201,
+    dependencies=_manage,
+)
+async def capture_product_input_image(
+    product_id: ProductId,
+    body: CaptureProductInputImageRequest,
+    principal: PrincipalDep,
+    use_case: CaptureProductInputImageDep,
+) -> InputImageResponse:
+    assert principal.tenant_id is not None
+    image = await use_case(
+        tenant_id=principal.tenant_id,
+        product_id=product_id,
+        input_image_slot_id=body.input_image_slot_id,
+        asset_id=body.asset_id,
+        created_by=principal.user_id,
+        variant_id=body.variant_id,
+    )
+    return InputImageResponse.from_entity(image)
 
 
 @router.post(
