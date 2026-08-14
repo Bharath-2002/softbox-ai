@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     generation_provider: str = "nano-banana"
     generation_model: str = "nano-banana-2"
 
+    # ── Copy generation (D23) ────────────────────────────────────────────────
+    # Same "model id pinned in config, not code" reasoning as `generation_model`
+    # above. No real `TextGeneration` adapter exists yet, same deferred-adapter
+    # posture.
+    content_generation_model: str = "placeholder-text-model"
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def is_production(self) -> bool:

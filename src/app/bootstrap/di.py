@@ -21,6 +21,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from app.agents.catalog_image_qc import CatalogImageQcAgent
+from app.agents.copywriting import CopywritingAgent
 from app.agents.generation_render import GenerationRenderAgent
 from app.agents.input_image_validation import InputImageValidationAgent
 from app.agents.template_analysis import TemplateAnalysisAgent
@@ -29,10 +30,17 @@ from app.api.deps.content_moderation import get_content_moderation_scanner
 from app.api.deps.image_generation import get_image_generation
 from app.api.deps.object_storage import get_object_storage
 from app.api.deps.quality_control import get_quality_control
+from app.api.deps.text_generation import get_text_generation
 from app.api.deps.vision_analysis import get_vision_analysis
 from app.features.assets.request_download import RequestDownload
 from app.features.assets.request_upload import RequestUpload
 from app.features.assets.verify_and_register_upload import VerifyAndRegisterUpload
+from app.features.content.complete_content_draft_generation import (
+    CompleteContentDraftGeneration,
+)
+from app.features.content.fail_content_draft_generation import FailContentDraftGeneration
+from app.features.content.generate_content_draft import GenerateContentDraft
+from app.features.content.start_content_draft_generation import StartContentDraftGeneration
 from app.features.generation.approve_catalog_image import ApproveCatalogImage
 from app.features.generation.bulk_approve_catalog_images_for_product import (
     BulkApproveCatalogImagesForProduct,
@@ -107,6 +115,7 @@ from app.services.ports.identity_provider import IdentityProvider
 from app.services.ports.image_generation import ImageGeneration
 from app.services.ports.object_storage import ObjectStorage
 from app.services.ports.quality_control import QualityControl
+from app.services.ports.text_generation import TextGeneration
 from app.services.ports.token_issuer import TokenIssuer
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.services.ports.vision_analysis import VisionAnalysis
@@ -521,6 +530,42 @@ def get_bulk_approve_catalog_images_for_product(
     return BulkApproveCatalogImagesForProduct(uow_factory, clock)
 
 
+def get_generate_content_draft(
+    request: Request, uow_factory: UowFactoryDep, clock: ClockDep
+) -> GenerateContentDraft:
+    settings = request.app.state.settings
+    return GenerateContentDraft(uow_factory, clock, model=settings.content_generation_model)
+
+
+def get_start_content_draft_generation(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> StartContentDraftGeneration:
+    return StartContentDraftGeneration(uow_factory, clock)
+
+
+def get_complete_content_draft_generation(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CompleteContentDraftGeneration:
+    return CompleteContentDraftGeneration(uow_factory, clock)
+
+
+def get_fail_content_draft_generation(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> FailContentDraftGeneration:
+    return FailContentDraftGeneration(uow_factory, clock)
+
+
+def get_copywriting_agent(
+    start: Annotated[StartContentDraftGeneration, Depends(get_start_content_draft_generation)],
+    complete: Annotated[
+        CompleteContentDraftGeneration, Depends(get_complete_content_draft_generation)
+    ],
+    fail: Annotated[FailContentDraftGeneration, Depends(get_fail_content_draft_generation)],
+    text_generation: Annotated[TextGeneration, Depends(get_text_generation)],
+) -> CopywritingAgent:
+    return CopywritingAgent(start, complete, fail, text_generation)
+
+
 def get_reap_stuck_task_queue_jobs(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> ReapStuckTaskQueueJobs:
@@ -630,3 +675,5 @@ ListCatalogImagesForReviewDep = Annotated[
 BulkApproveCatalogImagesForProductDep = Annotated[
     BulkApproveCatalogImagesForProduct, Depends(get_bulk_approve_catalog_images_for_product)
 ]
+GenerateContentDraftDep = Annotated[GenerateContentDraft, Depends(get_generate_content_draft)]
+CopywritingAgentDep = Annotated[CopywritingAgent, Depends(get_copywriting_agent)]
