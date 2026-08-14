@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from app.agents.catalog_image_qc import CatalogImageQcAgent
 from app.entities.asset import Asset, AssetKind
 from app.entities.catalog_image import CatalogImage
+from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion
 from app.entities.generation_item import GenerationItem
 from app.entities.generation_request import GenerationRequest
@@ -24,7 +25,7 @@ from app.features.generation.fail_catalog_image_qc import FailCatalogImageQc
 from app.features.generation.start_catalog_image_qc import JOB_TYPE, StartCatalogImageQc
 from app.services.ports.quality_control import QcVerdict
 from app.services.spec_snapshot import build_snapshot
-from app.shared.ids import new_catalog_template_id, new_category_id, new_tenant_id, new_user_id
+from app.shared.ids import new_catalog_template_id, new_tenant_id, new_user_id
 from tests.fakes.clock import FakeClock
 from tests.fakes.object_storage import InMemoryObjectStorage
 from tests.fakes.quality_control import FakeQualityControl
@@ -51,8 +52,12 @@ def _agent(
 async def _seed(
     uow_factory: FakeUnitOfWorkFactory, storage: InMemoryObjectStorage, tenant_id: object
 ) -> CatalogImage:
-    category_id = new_category_id()
     user_id = new_user_id()
+    category = Category.create(
+        tenant_id, key="sarees", name="Sarees", slug="sarees", parent=None, now=_NOW
+    )
+    await uow_factory.categories.add(category)
+    category_id = category.id
 
     closeup = CatalogImageSlot.create(
         tenant_id,

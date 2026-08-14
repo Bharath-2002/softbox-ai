@@ -22,6 +22,7 @@ from app.bootstrap.di import get_clock, get_uow_factory
 from app.bootstrap.settings import Settings
 from app.entities.asset import Asset, AssetKind
 from app.entities.catalog_image import CatalogImage
+from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion
 from app.entities.generation_item import GenerationItem
 from app.entities.generation_request import GenerationRequest
@@ -39,7 +40,6 @@ from app.shared.ids import (
     TenantId,
     new_catalog_image_slot_id,
     new_catalog_template_id,
-    new_category_id,
     new_category_spec_version_id,
     new_product_id,
     new_product_variant_id,
@@ -192,8 +192,12 @@ async def test_render_next_requires_the_product_manage_capability() -> None:
 async def _seed_qc(
     uow_factory: FakeUnitOfWorkFactory, storage: InMemoryObjectStorage, tenant_id: TenantId
 ) -> None:
-    category_id = new_category_id()
     user_id = new_user_id()
+    category = Category.create(
+        tenant_id, key="sarees", name="Sarees", slug="sarees", parent=None, now=_NOW
+    )
+    await uow_factory.categories.add(category)
+    category_id = category.id
 
     closeup = CatalogImageSlot.create(
         tenant_id,

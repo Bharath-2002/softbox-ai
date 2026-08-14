@@ -42,8 +42,19 @@ mistake `CreateProduct`'s `price_currency` discussion caught and avoided. Auto-a
 when approval is disabled is M6's job ("Approval & content"), once a real approval
 feature exists to make that call for real.
 
-The QC/approval transitions this chunk does *not* add
-(`pending_approval -> approved/rejected`) still have no caller — that is M6, not M5.
+`approve()`/`reject()` (M6) both start from `pending_approval` only, matching
+`docs/DIAGRAMS.md`'s full `catalog_image` state diagram exactly (`pending_approval -->
+img_approved` / `pending_approval --> img_rejected`) — that diagram has **no edge leaving
+`human_review`** at all, so neither method accepts that starting state. That is not an
+oversight this chunk works around: a `human_review` image is a genuinely unresolved case
+today (flagged in CHECKLIST.md as a known gap), and inventing a
+`human_review -> approved/rejected` transition the diagram never specified would be
+guessing at a decision only a human should make.
+
+`approve()` takes `approved_by: UserId | None` — `None` for the auto-approve path
+(`features.generation.complete_catalog_image_qc`, driven by the `approval.required`
+setting resolving `False`), since no human acted. A human-driven approval (the approval
+queue API) always passes a real `UserId`.
 """
 
 from __future__ import annotations
@@ -152,5 +163,25 @@ class CatalogImage:
                 f"Cannot escalate to human review from status {self.status.value!r}."
             )
         self.status = CatalogImageStatus.HUMAN_REVIEW
+        self.rejection_reason = reason
+        self.updated_at = now
+
+    def approve(self, *, approved_by: UserId | None, now: datetime) -> None:
+        """`pending_approval -> approved`. `approved_by` is `None` only for
+        the auto-approve path (`approval.required` resolved `False`) — a
+        human-driven approval always passes a real `UserId`."""
+        if self.status != CatalogImageStatus.PENDING_APPROVAL:
+            raise ValidationError(f"Cannot approve from status {self.status.value!r}.")
+        self.status = CatalogImageStatus.APPROVED
+        self.approved_by = approved_by
+        self.approved_at = now
+        self.updated_at = now
+
+    def reject(self, *, reason: str, now: datetime) -> None:
+        """`pending_approval -> rejected`. Human-only — nothing in this
+        codebase auto-rejects, unlike `approve()`."""
+        if self.status != CatalogImageStatus.PENDING_APPROVAL:
+            raise ValidationError(f"Cannot reject from status {self.status.value!r}.")
+        self.status = CatalogImageStatus.REJECTED
         self.rejection_reason = reason
         self.updated_at = now

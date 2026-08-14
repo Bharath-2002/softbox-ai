@@ -1,12 +1,25 @@
 """Records a `QcVerdict` (D20) against the `catalog_image` it was evaluated
-for. A pass lands on `pending_approval` (never auto-`approved` - see
-`entities.catalog_image`'s docstring for why no auto-approve branch exists).
+for. A pass always lands on `pending_approval` first via `mark_qc_passed` -
+QC and approval are recorded as two separate facts even when the net result
+is immediate approval, so `qc_result` is never lost or skipped past. Then,
+in the same transaction, `approval.required` (D16) is resolved at the
+product's category/product scope: resolving to the literal `False` calls
+`CatalogImage.approve(approved_by=None, ...)` immediately after; anything
+else - `True`, unset (`None`), or a stored value that isn't literally the
+bool `False` - leaves the image on `pending_approval`, fail-closed the same
+way `QuotaReservationRepository.reserve` treats an unprovisioned metric as
+zero budget rather than unlimited. This is the "QC still enforced when
+approval is disabled" property M6's gate tests for: the verdict and its
+checks are always written via `mark_qc_passed` before the setting is even
+read, so disabling approval cannot skip QC, only the human review step
+after it.
+
 A fail lands on `qc_failed` and then, in the same transaction, either
 creates the next `generation_item` (D20's bounded retry ladder - new seed,
 then a different template, via the pure `services.qc_retry_ladder.
 next_rung`) or escalates to `human_review` once the ladder is exhausted -
-reachable regardless of any approval setting, since nothing in this
-codebase reads one (see `entities.catalog_image`'s docstring again).
+reachable regardless of the approval setting, since `human_review` is not
+on the QC-pass path this setting governs at all.
 
 Completes the `catalog_image.qc_requested` `task_queue` job unconditionally
 at the end - from the queue's point of view, "QC ran and produced a
@@ -36,11 +49,13 @@ from app.services.ports.quality_control import QcVerdict
 from app.services.ports.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from app.services.prompt_composition import COMPOSITION_VERSION, compose_prompt, merge_attributes
 from app.services.qc_retry_ladder import RetryRung, next_rung
+from app.services.settings_resolver import SettingsResolver
 from app.shared.clock import Clock
 from app.shared.errors import NotFoundError
 from app.shared.ids import CatalogImageId, TenantId
 
 _SEED_UPPER_BOUND = 2**31 - 1
+_APPROVAL_REQUIRED_KEY = "approval.required"
 
 
 class CompleteCatalogImageQc:
@@ -64,6 +79,27 @@ class CompleteCatalogImageQc:
 
             if verdict.passed:
                 image.mark_qc_passed(qc_result=verdict.checks, now=now)
+
+                item = await uow.generation_items.get(tenant_id, image.generation_item_id)
+                if item is None:
+                    raise NotFoundError("Generation item not found.")
+                request = await uow.generation_requests.get(tenant_id, item.request_id)
+                if request is None:
+                    raise NotFoundError("Generation request not found.")
+                product = await uow.products.get(tenant_id, request.product_id)
+                if product is None:
+                    raise NotFoundError("Product not found.")
+
+                resolver = SettingsResolver(uow.settings, uow.categories)
+                approval_required = await resolver.resolve(
+                    tenant_id,
+                    _APPROVAL_REQUIRED_KEY,
+                    category_id=product.category_id,
+                    product_id=product.id,
+                )
+                if approval_required is False:
+                    image.approve(approved_by=None, now=now)
+
                 await uow.catalog_images.update(image)
                 await uow.task_queue.complete(tenant_id, job_id, now=now)
                 return

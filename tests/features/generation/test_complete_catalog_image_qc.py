@@ -8,12 +8,14 @@ from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
 
 from app.entities.catalog_image import CatalogImage
 from app.entities.catalog_template import CatalogTemplate
+from app.entities.category import Category
 from app.entities.category_spec_version import CategorySpecVersion
 from app.entities.generation_item import GenerationItem
 from app.entities.generation_request import GenerationRequest
 from app.entities.image_slots import CatalogImageSlot
 from app.entities.product import Product
 from app.entities.product_variant import ProductVariant
+from app.entities.setting import Setting, SettingScope
 from app.features.generation.complete_catalog_image_qc import CompleteCatalogImageQc
 from app.services.ports.quality_control import QcVerdict
 from app.services.spec_snapshot import build_snapshot
@@ -24,7 +26,6 @@ from app.shared.ids import (
     TenantId,
     new_asset_id,
     new_catalog_image_id,
-    new_category_id,
     new_tenant_id,
     new_user_id,
 )
@@ -71,10 +72,14 @@ async def _seed(
     *,
     attempt_no: int = 1,
     template_id: CatalogTemplateId | None = None,
-) -> tuple[TenantId, CatalogImage, GenerationItem]:
+) -> tuple[TenantId, CatalogImage, GenerationItem, Product]:
     tenant_id = new_tenant_id()
-    category_id = new_category_id()
     user_id = new_user_id()
+    category = Category.create(
+        tenant_id, key="sarees", name="Sarees", slug="sarees", parent=None, now=_NOW
+    )
+    await uow_factory.categories.add(category)
+    category_id = category.id
 
     closeup = CatalogImageSlot.create(
         tenant_id,
@@ -163,12 +168,12 @@ async def _seed(
     image = CatalogImage.create(tenant_id, variant_id, slot_id, output_asset_id, item.id, now=_NOW)
     await uow_factory.catalog_images.add(image)
 
-    return tenant_id, image, item
+    return tenant_id, image, item, product
 
 
 async def test_a_pass_reaches_pending_approval_and_completes_the_job() -> None:
     use_case, uow_factory = _use_case()
-    tenant_id, image, _item = await _seed(uow_factory)
+    tenant_id, image, _item, _product = await _seed(uow_factory)
     job_id = await _job_id(uow_factory, tenant_id)
 
     await use_case(tenant_id=tenant_id, catalog_image_id=image.id, job_id=job_id, verdict=_PASS)
@@ -182,9 +187,82 @@ async def test_a_pass_reaches_pending_approval_and_completes_the_job() -> None:
     assert job.status == "succeeded"
 
 
+async def test_a_pass_auto_approves_when_approval_is_disabled_for_the_category() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, image, _item, product = await _seed(uow_factory)
+    await uow_factory.settings.add(
+        Setting.create(
+            scope_type=SettingScope.CATEGORY,
+            tenant_id=tenant_id,
+            scope_id=product.category_id,
+            key="approval.required",
+            value=False,
+            now=_NOW,
+        )
+    )
+    job_id = await _job_id(uow_factory, tenant_id)
+
+    await use_case(tenant_id=tenant_id, catalog_image_id=image.id, job_id=job_id, verdict=_PASS)
+
+    stored = await uow_factory.catalog_images.get(tenant_id, image.id)
+    assert stored is not None
+    assert stored.status.value == "approved"
+    assert stored.approved_by is None
+    assert stored.qc_result == {"subject_present": True}  # QC still ran and was recorded
+
+
+async def test_a_pass_stays_pending_approval_when_the_setting_is_not_the_literal_bool_false() -> (
+    None
+):
+    use_case, uow_factory = _use_case()
+    tenant_id, image, _item, product = await _seed(uow_factory)
+    await uow_factory.settings.add(
+        Setting.create(
+            scope_type=SettingScope.CATEGORY,
+            tenant_id=tenant_id,
+            scope_id=product.category_id,
+            key="approval.required",
+            value="false",  # a string, not the bool False -- must not auto-approve
+            now=_NOW,
+        )
+    )
+    job_id = await _job_id(uow_factory, tenant_id)
+
+    await use_case(tenant_id=tenant_id, catalog_image_id=image.id, job_id=job_id, verdict=_PASS)
+
+    stored = await uow_factory.catalog_images.get(tenant_id, image.id)
+    assert stored is not None
+    assert stored.status.value == "pending_approval"
+
+
+async def test_a_failure_is_unaffected_by_approval_being_disabled() -> None:
+    """The gate's own wording: disabling approval must not disable QC. A
+    failing verdict still runs the full retry ladder regardless of the
+    setting -- approval only ever gates a *pass*."""
+    use_case, uow_factory = _use_case()
+    tenant_id, image, _item, product = await _seed(uow_factory, attempt_no=1)
+    await uow_factory.settings.add(
+        Setting.create(
+            scope_type=SettingScope.CATEGORY,
+            tenant_id=tenant_id,
+            scope_id=product.category_id,
+            key="approval.required",
+            value=False,
+            now=_NOW,
+        )
+    )
+    job_id = await _job_id(uow_factory, tenant_id)
+
+    await use_case(tenant_id=tenant_id, catalog_image_id=image.id, job_id=job_id, verdict=_FAIL)
+
+    stored = await uow_factory.catalog_images.get(tenant_id, image.id)
+    assert stored is not None
+    assert stored.status.value == "qc_failed"
+
+
 async def test_first_failure_creates_a_retry_with_the_same_template_and_completes_the_job() -> None:
     use_case, uow_factory = _use_case()
-    tenant_id, image, item = await _seed(uow_factory, attempt_no=1)
+    tenant_id, image, item, _product = await _seed(uow_factory, attempt_no=1)
     job_id = await _job_id(uow_factory, tenant_id)
 
     await use_case(tenant_id=tenant_id, catalog_image_id=image.id, job_id=job_id, verdict=_FAIL)
@@ -213,7 +291,7 @@ async def test_first_failure_creates_a_retry_with_the_same_template_and_complete
 
 async def test_second_failure_with_an_alternate_template_recomposes_the_prompt() -> None:
     use_case, uow_factory = _use_case()
-    tenant_id, image, item = await _seed(uow_factory, attempt_no=1)
+    tenant_id, image, item, _product = await _seed(uow_factory, attempt_no=1)
     job_id1 = await _job_id(uow_factory, tenant_id)
     await use_case(tenant_id=tenant_id, catalog_image_id=image.id, job_id=job_id1, verdict=_FAIL)
 
@@ -249,7 +327,7 @@ async def test_second_failure_with_an_alternate_template_recomposes_the_prompt()
 
 async def test_second_failure_with_no_alternate_template_reaches_human_review() -> None:
     use_case, uow_factory = _use_case()
-    tenant_id, image, item = await _seed(uow_factory, attempt_no=1)
+    tenant_id, image, item, _product = await _seed(uow_factory, attempt_no=1)
     job_id1 = await _job_id(uow_factory, tenant_id)
     await use_case(tenant_id=tenant_id, catalog_image_id=image.id, job_id=job_id1, verdict=_FAIL)
 
