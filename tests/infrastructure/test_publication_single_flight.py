@@ -11,6 +11,7 @@ of two rows both trying to publish, mirroring
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import text
@@ -178,5 +179,42 @@ async def test_two_live_publications_cannot_claim_the_same_channel_and_variant(
                     content_draft_id=None,
                     payload={"caption": "Second.", "media_asset_ids": [], "link": None},
                     now=utcnow(),
+                )
+            )
+
+
+async def test_a_scheduled_publication_also_blocks_a_second_live_row(
+    owner_uow: Callable[[TenantId | None], SqlUnitOfWork],
+) -> None:
+    """The index widened one migration after it was first added
+    (`6e9ce80dab43_widen_publications_status`) to cover `scheduled` too — a
+    publication merely waiting for its scheduled time is exactly as "live"
+    as one already `pending`/`publishing` for this guard's purpose."""
+    tenant_id, variant_id, channel_id = await _seed(owner_uow)
+    now = utcnow()
+
+    async with owner_uow(tenant_id) as uow:
+        await uow.publications.add(
+            Publication.create(
+                tenant_id,
+                variant_id,
+                channel_id,
+                content_draft_id=None,
+                payload={"caption": "First.", "media_asset_ids": [], "link": None},
+                scheduled_at=now + timedelta(days=1),
+                now=now,
+            )
+        )
+
+    with pytest.raises(IntegrityError, match="ix_publications_live_per_channel_variant"):
+        async with owner_uow(tenant_id) as uow:
+            await uow.publications.add(
+                Publication.create(
+                    tenant_id,
+                    variant_id,
+                    channel_id,
+                    content_draft_id=None,
+                    payload={"caption": "Second.", "media_asset_ids": [], "link": None},
+                    now=now,
                 )
             )

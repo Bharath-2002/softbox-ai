@@ -80,6 +80,9 @@ from app.features.publishing.complete_publication_publish import CompletePublica
 from app.features.publishing.create_publication import CreatePublication
 from app.features.publishing.defer_publication_publish import DeferPublicationPublish
 from app.features.publishing.fail_publication_publish import FailPublicationPublish
+from app.features.publishing.release_scheduled_publications import (
+    ReleaseScheduledPublicationsForTenant,
+)
 from app.features.publishing.start_publication_publish import StartPublicationPublish
 from app.features.settings.resolve_setting import ResolveSetting
 from app.features.settings.upsert_setting import UpsertSetting
@@ -608,6 +611,12 @@ def get_defer_publication_publish(
     return DeferPublicationPublish(uow_factory, clock)
 
 
+def get_release_scheduled_publications_for_tenant(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> ReleaseScheduledPublicationsForTenant:
+    return ReleaseScheduledPublicationsForTenant(uow_factory, clock)
+
+
 def get_publish_channel_agent(
     request: Request,
     start: Annotated[StartPublicationPublish, Depends(get_start_publication_publish)],
@@ -762,6 +771,10 @@ GenerateContentDraftDep = Annotated[GenerateContentDraft, Depends(get_generate_c
 CopywritingAgentDep = Annotated[CopywritingAgent, Depends(get_copywriting_agent)]
 CreatePublicationDep = Annotated[CreatePublication, Depends(get_create_publication)]
 PublishChannelAgentDep = Annotated[PublishChannelAgent, Depends(get_publish_channel_agent)]
+ReleaseScheduledPublicationsForTenantDep = Annotated[
+    ReleaseScheduledPublicationsForTenant,
+    Depends(get_release_scheduled_publications_for_tenant),
+]
 ApproveContentDraftDep = Annotated[ApproveContentDraft, Depends(get_approve_content_draft)]
 RejectContentDraftDep = Annotated[RejectContentDraft, Depends(get_reject_content_draft)]
 ListContentDraftsForVariantDep = Annotated[

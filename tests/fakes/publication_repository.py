@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from app.entities.publication import Publication, PublicationStatus
 from app.shared.ids import ProductVariantId, PublicationId, SocialAccountId, TenantId
 
-_LIVE_STATUSES = (PublicationStatus.PENDING, PublicationStatus.PUBLISHING)
+_LIVE_STATUSES = (
+    PublicationStatus.SCHEDULED,
+    PublicationStatus.PENDING,
+    PublicationStatus.PUBLISHING,
+)
 
 
 class InMemoryPublicationRepository:
@@ -25,6 +31,20 @@ class InMemoryPublicationRepository:
             ):
                 return row
         return None
+
+    async def list_due_for_release(
+        self, tenant_id: TenantId, *, before: datetime, limit: int
+    ) -> list[Publication]:
+        matches = [
+            row
+            for (tid, _), row in self._rows.items()
+            if tid == tenant_id
+            and row.status is PublicationStatus.SCHEDULED
+            and row.scheduled_at is not None
+            and row.scheduled_at <= before
+        ]
+        matches.sort(key=lambda row: row.scheduled_at or before)
+        return matches[:limit]
 
     async def add(self, publication: Publication) -> None:
         self._rows[(publication.tenant_id, publication.id)] = publication

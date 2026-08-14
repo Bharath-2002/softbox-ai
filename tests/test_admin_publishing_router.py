@@ -8,7 +8,7 @@ same known-interim "real capability, no automatic trigger" shape
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from httpx import ASGITransport, AsyncClient
 
@@ -112,6 +112,59 @@ async def test_create_publication_over_http_returns_202() -> None:
     events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
     assert len(events) == 1
     assert events[0].event_type == "publication.publish_requested"
+
+
+async def test_a_scheduled_publication_over_http_writes_no_outbox_event_yet() -> None:
+    app, uow_factory, _clock, codec, _channel_publisher = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    variant, channel = await _seed_variant_and_channel(uow_factory, tenant_id)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/variants/{variant.id}/publications",
+            json={
+                "channel_id": str(channel.id),
+                "caption": "Crafted with care.",
+                "media_asset_ids": [str(new_asset_id())],
+                "scheduled_at": (_NOW + timedelta(days=1)).isoformat(),
+            },
+            headers=headers,
+        )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "scheduled"
+    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
+    assert events == []
+
+
+async def test_release_scheduled_publications_over_http_releases_a_due_row() -> None:
+    app, uow_factory, clock, codec, _channel_publisher = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    variant, channel = await _seed_variant_and_channel(uow_factory, tenant_id)
+    publication = Publication.create(
+        tenant_id,
+        variant.id,
+        channel.id,
+        content_draft_id=None,
+        payload={"caption": "x", "media_asset_ids": [], "link": None},
+        scheduled_at=_NOW + timedelta(hours=1),
+        now=_NOW,
+    )
+    await uow_factory.publications.add(publication)
+    clock.advance(timedelta(hours=1))
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post("/api/v1/admin/publications/release-scheduled", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"released": 1}
+    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
+    assert len(events) == 1
 
 
 async def test_create_publication_requires_the_product_manage_capability() -> None:

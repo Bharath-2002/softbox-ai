@@ -25,15 +25,26 @@ backed by the migration's partial unique index
 (`ix_publications_live_per_channel_variant`) for the check-then-act race
 between two concurrent calls — the same "app-level check, DB-level
 backstop" split D15's `uq_category_spec_versions_tenant_category_version`
-established. A publication is "live" only while `pending`/`publishing`; a
-second publish to the same channel for the same variant is fine once the
-first has reached `published` or `failed`.
+established. A publication is "live" while `scheduled`, `pending` or
+`publishing`; a second publish to the same channel for the same variant is
+fine once the first has reached `published` or `failed`.
+
+A future `scheduled_at` makes `Publication.create` start the row in
+`SCHEDULED` rather than `PENDING` (see that entity's docstring) — this use
+case writes no `publish_requested` outbox event in that case, since
+nothing should be claimable yet. `features.publishing.
+release_scheduled_publications` writes that event itself, once due, in the
+same transaction as the `SCHEDULED -> PENDING` transition. A `scheduled_at`
+that is `None` or already due behaves exactly as before: `PENDING` and
+enqueued immediately.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from app.entities.content_draft import ContentDraftStatus
-from app.entities.publication import Publication
+from app.entities.publication import Publication, PublicationStatus
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.shared.clock import Clock
 from app.shared.errors import ConflictError, NotFoundError, ValidationError
@@ -57,6 +68,7 @@ class CreatePublication:
         caption: str,
         media_asset_ids: list[AssetId],
         link: str | None = None,
+        scheduled_at: datetime | None = None,
     ) -> Publication:
         now = self._clock.now()
         async with self._uow_factory(tenant_id) as uow:
@@ -94,15 +106,17 @@ class CreatePublication:
                     "media_asset_ids": [str(a) for a in media_asset_ids],
                     "link": link,
                 },
+                scheduled_at=scheduled_at,
                 now=now,
             )
             await uow.publications.add(publication)
 
-            await uow.outbox_events.add(
-                tenant_id,
-                event_type=_EVENT_TYPE,
-                payload={"publication_id": str(publication.id)},
-                now=now,
-            )
+            if publication.status is not PublicationStatus.SCHEDULED:
+                await uow.outbox_events.add(
+                    tenant_id,
+                    event_type=_EVENT_TYPE,
+                    payload={"publication_id": str(publication.id)},
+                    now=now,
+                )
 
             return publication

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.entities.content_draft import ContentDraft
 from app.entities.product_variant import ProductVariant
+from app.entities.publication import PublicationStatus
 from app.entities.social_account import SocialAccount
 from app.features.publishing.create_publication import CreatePublication
 from app.shared.errors import ConflictError, NotFoundError, ValidationError
@@ -191,6 +192,68 @@ async def test_a_second_publish_succeeds_once_the_first_has_reached_a_terminal_s
 
     assert second.id != first.id
     assert second.status.value == "pending"
+
+
+async def test_a_future_scheduled_at_creates_a_scheduled_row_with_no_outbox_event() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
+
+    publication = await use_case(
+        tenant_id=tenant_id,
+        variant_id=variant_id,
+        channel_id=channel_id,
+        content_draft_id=None,
+        caption="x",
+        media_asset_ids=[AssetId(new_asset_id())],
+        scheduled_at=_NOW + timedelta(days=1),
+    )
+
+    assert publication.status is PublicationStatus.SCHEDULED
+    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
+    assert events == []
+
+
+async def test_a_past_scheduled_at_publishes_immediately_like_no_schedule() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
+
+    publication = await use_case(
+        tenant_id=tenant_id,
+        variant_id=variant_id,
+        channel_id=channel_id,
+        content_draft_id=None,
+        caption="x",
+        media_asset_ids=[AssetId(new_asset_id())],
+        scheduled_at=_NOW - timedelta(minutes=1),
+    )
+
+    assert publication.status is PublicationStatus.PENDING
+    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
+    assert len(events) == 1
+
+
+async def test_a_second_publish_conflicts_while_the_first_is_merely_scheduled() -> None:
+    use_case, uow_factory = _use_case()
+    tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
+    await use_case(
+        tenant_id=tenant_id,
+        variant_id=variant_id,
+        channel_id=channel_id,
+        content_draft_id=None,
+        caption="First.",
+        media_asset_ids=[AssetId(new_asset_id())],
+        scheduled_at=_NOW + timedelta(days=1),
+    )
+
+    with pytest.raises(ConflictError):
+        await use_case(
+            tenant_id=tenant_id,
+            variant_id=variant_id,
+            channel_id=channel_id,
+            content_draft_id=None,
+            caption="Second.",
+            media_asset_ids=[AssetId(new_asset_id())],
+        )
 
 
 async def test_an_unknown_content_draft_is_not_found() -> None:

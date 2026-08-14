@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +11,11 @@ from app.entities.publication import Publication, PublicationStatus
 from app.infrastructure.persistence.mapping import publications_table
 from app.shared.ids import ProductVariantId, PublicationId, SocialAccountId, TenantId
 
-_LIVE_STATUSES = (PublicationStatus.PENDING, PublicationStatus.PUBLISHING)
+_LIVE_STATUSES = (
+    PublicationStatus.SCHEDULED,
+    PublicationStatus.PENDING,
+    PublicationStatus.PUBLISHING,
+)
 
 
 class SqlPublicationRepository:
@@ -33,6 +39,22 @@ class SqlPublicationRepository:
             publications_table.c.status.in_(_LIVE_STATUSES),
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def list_due_for_release(
+        self, tenant_id: TenantId, *, before: datetime, limit: int
+    ) -> list[Publication]:
+        stmt = (
+            select(Publication)
+            .where(
+                publications_table.c.tenant_id == tenant_id,
+                publications_table.c.status == PublicationStatus.SCHEDULED,
+                publications_table.c.scheduled_at <= before,
+            )
+            .order_by(publications_table.c.scheduled_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
 
     async def add(self, publication: Publication) -> None:
         self._session.add(publication)

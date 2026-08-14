@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -95,3 +95,54 @@ def test_cannot_record_a_failure_outside_publishing() -> None:
 
     with pytest.raises(ValidationError):
         publication.record_attempt_failure(error="x", terminal=False, now=_NOW)
+
+
+def test_a_future_scheduled_at_starts_scheduled_not_pending() -> None:
+    publication = Publication.create(
+        new_tenant_id(),
+        new_product_variant_id(),
+        new_social_account_id(),
+        content_draft_id=None,
+        payload={"caption": "hello", "media_asset_ids": [], "link": None},
+        scheduled_at=_NOW + timedelta(days=1),
+        now=_NOW,
+    )
+
+    assert publication.status is PublicationStatus.SCHEDULED
+
+
+def test_a_past_scheduled_at_starts_pending_like_publish_now() -> None:
+    publication = Publication.create(
+        new_tenant_id(),
+        new_product_variant_id(),
+        new_social_account_id(),
+        content_draft_id=None,
+        payload={"caption": "hello", "media_asset_ids": [], "link": None},
+        scheduled_at=_NOW - timedelta(minutes=1),
+        now=_NOW,
+    )
+
+    assert publication.status is PublicationStatus.PENDING
+
+
+def test_release_for_publishing_moves_scheduled_to_pending() -> None:
+    publication = Publication.create(
+        new_tenant_id(),
+        new_product_variant_id(),
+        new_social_account_id(),
+        content_draft_id=None,
+        payload={"caption": "hello", "media_asset_ids": [], "link": None},
+        scheduled_at=_NOW + timedelta(days=1),
+        now=_NOW,
+    )
+
+    publication.release_for_publishing(now=_NOW + timedelta(days=1))
+
+    assert publication.status is PublicationStatus.PENDING
+
+
+def test_cannot_release_a_publication_that_was_never_scheduled() -> None:
+    publication = _publication()
+
+    with pytest.raises(ValidationError):
+        publication.release_for_publishing(now=_NOW)

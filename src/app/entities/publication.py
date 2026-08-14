@@ -9,15 +9,28 @@ again — the single fact the Gate's "a retry after a timeout does not
 create a second post" property rests on. Nothing in this entity
 regenerates it; a retry re-reads the same row and reuses the same key.
 
-Four statuses, not `generation_item`'s five (`pending -> running ->
-succeeded` / `failed -> dead`): this entity collapses "failed, will retry"
-back into `PENDING` rather than giving it its own transient `FAILED` state,
-because `attempts`/`last_error` already carry the per-attempt history a
-merchant-facing publish record needs — a fifth state here would describe
-nothing `attempts`/`last_error` don't already say plainer. `FAILED` is
-reserved for the one case that *is* worth a distinct terminal state:
-attempts exhausted (`TaskQueue.fail` reporting the job went `dead`), where
-nothing will ever retry this row again and a human needs to know that.
+Five statuses, not `generation_item`'s five for the same reason (`pending
+-> running -> succeeded` / `failed -> dead`) but a different vocabulary:
+this entity collapses "failed, will retry" back into `PENDING` rather than
+giving it its own transient `FAILED` state, because `attempts`/`last_error`
+already carry the per-attempt history a merchant-facing publish record
+needs — a distinct state here would describe nothing `attempts`/
+`last_error` don't already say plainer. `FAILED` is reserved for the one
+case that *is* worth a distinct terminal state: attempts exhausted
+(`TaskQueue.fail` reporting the job went `dead`), where nothing will ever
+retry this row again and a human needs to know that.
+
+``SCHEDULED`` (added by `6e9ce80dab43_widen_publications_status`, see that
+migration) is D21's "a `due_at` column plus a poller" — a `Publication`
+created with a future `scheduled_at` starts here instead of `PENDING` and
+writes no `publish_requested` outbox event yet; nothing is claimable by
+`StartPublicationPublish` until `release_for_publishing()` moves it to
+`PENDING` and the poller (`features.publishing.
+release_scheduled_publications`) writes that event itself, in the same
+transaction as the transition. Treated as "live" for the single-flight
+guard exactly like `PENDING`/`PUBLISHING` — a second publish to the same
+channel and variant must not slip in while the first is merely waiting for
+its scheduled time.
 
 ``mark_publishing()`` accepts both `PENDING` (first attempt) and its own
 prior `PENDING` after a reverted failed attempt (the retry self-loop) —
@@ -46,6 +59,7 @@ from app.shared.ids import (
 
 
 class PublicationStatus(StrEnum):
+    SCHEDULED = "scheduled"
     PENDING = "pending"
     PUBLISHING = "publishing"
     PUBLISHED = "published"
@@ -82,6 +96,11 @@ class Publication:
         scheduled_at: datetime | None = None,
         now: datetime,
     ) -> Publication:
+        status = (
+            PublicationStatus.SCHEDULED
+            if scheduled_at is not None and scheduled_at > now
+            else PublicationStatus.PENDING
+        )
         return Publication(
             id=new_publication_id(),
             tenant_id=tenant_id,
@@ -89,7 +108,7 @@ class Publication:
             channel_id=channel_id,
             content_draft_id=content_draft_id,
             idempotency_key=uuid4().hex,
-            status=PublicationStatus.PENDING,
+            status=status,
             scheduled_at=scheduled_at,
             published_at=None,
             external_post_id=None,
@@ -100,6 +119,17 @@ class Publication:
             created_at=now,
             updated_at=now,
         )
+
+    def release_for_publishing(self, *, now: datetime) -> None:
+        """`SCHEDULED -> PENDING`, called by the poller once `scheduled_at`
+        is due. Distinct from `mark_publishing()`: this makes the row
+        claimable, it does not itself claim it — `StartPublicationPublish`
+        still does that, same as for a publication that was never
+        scheduled at all."""
+        if self.status != PublicationStatus.SCHEDULED:
+            raise ValidationError(f"Cannot release from status {self.status.value!r}.")
+        self.status = PublicationStatus.PENDING
+        self.updated_at = now
 
     def mark_publishing(self, *, now: datetime) -> None:
         if self.status != PublicationStatus.PENDING:

@@ -13,6 +13,12 @@ publish job is oldest-due for the tenant and calls ``ChannelPublisher``
 between two transactions. Gated on ``Capability.PRODUCT_MANAGE``, matching
 every other worker-step trigger route in this codebase — this is
 pipeline execution, not an approval action.
+
+``POST /publications/release-scheduled`` is D21's scheduling poller
+(``features.publishing.release_scheduled_publications``): moves every due
+``SCHEDULED`` publication to ``PENDING`` and writes its outbox event.
+Returns a count, the same "sweep over many rows" shape
+``reconcile-requests`` uses in ``admin_generation.py``.
 """
 
 from __future__ import annotations
@@ -23,7 +29,11 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
 from app.api.deps.authorization import PrincipalDep, require_capability
-from app.bootstrap.di import CreatePublicationDep, PublishChannelAgentDep
+from app.bootstrap.di import (
+    CreatePublicationDep,
+    PublishChannelAgentDep,
+    ReleaseScheduledPublicationsForTenantDep,
+)
 from app.entities.capabilities import Capability
 from app.entities.publication import Publication
 from app.shared.ids import AssetId, ContentDraftId, ProductVariantId, PublicationId, SocialAccountId
@@ -38,6 +48,7 @@ class CreatePublicationRequest(BaseModel):
     caption: str
     media_asset_ids: list[AssetId]
     link: str | None = None
+    scheduled_at: datetime | None = None
 
 
 class PublicationResponse(BaseModel):
@@ -87,6 +98,7 @@ async def create_publication(
         caption=body.caption,
         media_asset_ids=body.media_asset_ids,
         link=body.link,
+        scheduled_at=body.scheduled_at,
     )
     return PublicationResponse.from_entity(publication)
 
@@ -102,3 +114,20 @@ async def publish_next(
     assert principal.tenant_id is not None
     publication = await agent.run(tenant_id=principal.tenant_id)
     return PublicationResponse.from_entity(publication) if publication is not None else None
+
+
+class ReleaseScheduledResponse(BaseModel):
+    released: int
+
+
+@router.post(
+    "/publications/release-scheduled",
+    response_model=ReleaseScheduledResponse,
+    dependencies=_manage,
+)
+async def release_scheduled_publications(
+    principal: PrincipalDep, use_case: ReleaseScheduledPublicationsForTenantDep
+) -> ReleaseScheduledResponse:
+    assert principal.tenant_id is not None
+    released = await use_case(principal.tenant_id)
+    return ReleaseScheduledResponse(released=released)

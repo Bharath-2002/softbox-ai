@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import timedelta
 
 import pytest
 import pytest_asyncio
@@ -239,6 +240,62 @@ async def test_get_live_ignores_a_terminal_publication(ctx: Context) -> None:
     live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
 
     assert live is None
+
+
+async def test_get_live_finds_a_scheduled_publication(ctx: Context) -> None:
+    now = utcnow()
+    publication = Publication.create(
+        ctx.tenant_id,
+        ctx.variant_id,
+        ctx.channel_id,
+        content_draft_id=None,
+        payload={"caption": "x", "media_asset_ids": [], "link": None},
+        scheduled_at=now + timedelta(days=1),
+        now=now,
+    )
+    await ctx.publications.add(publication)
+
+    live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
+
+    assert live is not None
+    assert live.id == publication.id
+    assert live.status is PublicationStatus.SCHEDULED
+
+
+async def test_list_due_for_release_finds_a_due_scheduled_publication(ctx: Context) -> None:
+    now = utcnow()
+    publication = Publication.create(
+        ctx.tenant_id,
+        ctx.variant_id,
+        ctx.channel_id,
+        content_draft_id=None,
+        payload={"caption": "x", "media_asset_ids": [], "link": None},
+        scheduled_at=now - timedelta(minutes=1),
+        now=now - timedelta(days=1),
+    )
+    await ctx.publications.add(publication)
+
+    due = await ctx.publications.list_due_for_release(ctx.tenant_id, before=now, limit=10)
+
+    assert [p.id for p in due] == [publication.id]
+
+
+async def test_list_due_for_release_ignores_a_not_yet_due_publication(ctx: Context) -> None:
+    now = utcnow()
+    publication = Publication.create(
+        ctx.tenant_id,
+        ctx.variant_id,
+        ctx.channel_id,
+        content_draft_id=None,
+        payload={"caption": "x", "media_asset_ids": [], "link": None},
+        scheduled_at=now + timedelta(days=1),
+        now=now,
+    )
+    await ctx.publications.add(publication)
+
+    due = await ctx.publications.list_due_for_release(ctx.tenant_id, before=now, limit=10)
+
+    assert due == []
 
 
 async def test_update_persists_a_status_transition(ctx: Context) -> None:
