@@ -71,6 +71,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
+# Operator-run CLI tools, not application code - print() is the correct UX
+# for status an operator reads at a terminal, not a log line.
+"scripts/*" = ["T201"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Types
@@ -88,7 +91,7 @@ mypy_path = "src"
 # Version scripts are excluded: one-off DDL run once and never edited again,
 # where the friction of strict-typing every historical migration outweighs
 # the value - unlike migrations/rls.py and env.py, which are real, reused code.
-files = ["src/app", "migrations"]
+files = ["src/app", "migrations", "scripts"]
 exclude = ["^migrations/versions/"]
 
 [[tool.mypy.overrides]]
