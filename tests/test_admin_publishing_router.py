@@ -279,6 +279,34 @@ async def test_publish_next_over_http_claims_and_publishes() -> None:
     assert body["status"] == "published"
 
 
+async def test_fetch_metrics_next_over_http_claims_and_records_metrics() -> None:
+    app, uow_factory, _clock, codec, channel_publisher = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    variant, channel = await _seed_variant_and_channel(uow_factory, tenant_id)
+    publication = Publication.create(
+        tenant_id,
+        variant.id,
+        channel.id,
+        content_draft_id=None,
+        payload={"caption": "x", "media_asset_ids": [], "link": None},
+        now=_NOW,
+    )
+    publication.mark_dispatching(now=_NOW)
+    publication.mark_published(external_post_id="post-1", permalink=None, now=_NOW)
+    await uow_factory.publications.add(publication)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post("/api/v1/admin/publications/fetch-metrics-next", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body is not None
+    assert body["metrics"] == {"impressions": 0, "likes": 0, "clicks": 0}
+    assert channel_publisher.metrics_calls == ["post-1"]
+
+
 async def test_publish_next_over_http_returns_null_when_nothing_is_claimable() -> None:
     app, _uow_factory, _clock, codec, _channel_publisher = _build()
     tenant_id_str = str(uuid.uuid4())

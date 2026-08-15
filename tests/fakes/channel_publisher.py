@@ -24,6 +24,10 @@ key rather than regenerating it), not of this fake. `calls == 1` after a
 retry only proves this fake's own internal short-circuit fired — see
 `tests/agents/test_publish_channel.py`'s docstring for why that is a
 weaker claim than it looks.
+
+`next_metrics`/`next_metrics_error` back `fetch_metrics` for
+`tests/agents/test_publication_metrics.py` — a plain settable result and a
+one-shot error, the same shape `next_publish_error` already established.
 """
 
 from __future__ import annotations
@@ -49,6 +53,9 @@ class FakeChannelPublisher:
         self.next_validation: ValidationResult | None = None
         self.next_publish_error: Exception | None = None
         self.lose_response_after_success = False
+        self.next_metrics: ChannelMetrics | None = None
+        self.next_metrics_error: Exception | None = None
+        self.metrics_calls: list[str] = []
         self._posts_by_key: dict[str, PublishResult] = {}
         self._next_sequence = 0
 
@@ -86,4 +93,11 @@ class FakeChannelPublisher:
         return result
 
     async def fetch_metrics(self, external_id: str) -> ChannelMetrics:
+        self.metrics_calls.append(external_id)
+        if self.next_metrics_error is not None:
+            error = self.next_metrics_error
+            self.next_metrics_error = None
+            raise error
+        if self.next_metrics is not None:
+            return self.next_metrics
         return ChannelMetrics(impressions=0, likes=0, clicks=0)

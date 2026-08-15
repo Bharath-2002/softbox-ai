@@ -172,3 +172,42 @@ def test_cannot_cancel_once_dispatching() -> None:
 
     with pytest.raises(ValidationError):
         publication.cancel(now=_NOW)
+
+
+def _published() -> Publication:
+    publication = _publication()
+    publication.mark_dispatching(now=_NOW)
+    publication.mark_published(external_post_id="post-1", permalink=None, now=_NOW)
+    return publication
+
+
+def test_mark_metrics_fetch_attempted_bumps_metrics_fetched_at() -> None:
+    publication = _published()
+
+    publication.mark_metrics_fetch_attempted(now=_NOW)
+
+    assert publication.metrics_fetched_at == _NOW
+    assert publication.metrics is None
+
+
+def test_cannot_mark_metrics_fetch_attempted_outside_published() -> None:
+    publication = _publication()
+
+    with pytest.raises(ValidationError):
+        publication.mark_metrics_fetch_attempted(now=_NOW)
+
+
+def test_record_metrics_stores_the_result() -> None:
+    publication = _published()
+    publication.mark_metrics_fetch_attempted(now=_NOW)
+
+    publication.record_metrics(metrics={"impressions": 100, "likes": 5, "clicks": 2}, now=_NOW)
+
+    assert publication.metrics == {"impressions": 100, "likes": 5, "clicks": 2}
+
+
+def test_cannot_record_metrics_outside_published() -> None:
+    publication = _publication()
+
+    with pytest.raises(ValidationError):
+        publication.record_metrics(metrics={"impressions": 1, "likes": 0, "clicks": 0}, now=_NOW)

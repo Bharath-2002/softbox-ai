@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.entities.publication import Publication, PublicationStatus
@@ -55,6 +55,26 @@ class SqlPublicationRepository:
             .with_for_update(skip_locked=True)
         )
         return list((await self._session.execute(stmt)).scalars().all())
+
+    async def claim_for_metrics_fetch(
+        self, tenant_id: TenantId, *, before: datetime
+    ) -> Publication | None:
+        stmt = (
+            select(Publication)
+            .where(
+                publications_table.c.tenant_id == tenant_id,
+                publications_table.c.status == PublicationStatus.PUBLISHED,
+                publications_table.c.external_post_id.is_not(None),
+                or_(
+                    publications_table.c.metrics_fetched_at.is_(None),
+                    publications_table.c.metrics_fetched_at <= before,
+                ),
+            )
+            .order_by(publications_table.c.published_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def add(self, publication: Publication) -> None:
         self._session.add(publication)

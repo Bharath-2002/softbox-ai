@@ -22,6 +22,11 @@ between two transactions.
 ``POST /publications/{id}/cancel`` is the only other exit from
 ``SCHEDULED`` — see ``features.publishing.cancel_publication``.
 
+``POST /publications/fetch-metrics-next`` is the metrics fetch-back
+worker step (``agents.publication_metrics``): claims one stale/never-
+fetched `published` row and calls ``ChannelPublisher.fetch_metrics``
+between two transactions, same two-transaction shape as ``publish-next``.
+
 All gated on ``Capability.PRODUCT_MANAGE``, matching every other
 worker-step/publish-authoring trigger route in this codebase.
 """
@@ -29,6 +34,7 @@ worker-step/publish-authoring trigger route in this codebase.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
@@ -37,6 +43,7 @@ from app.api.deps.authorization import PrincipalDep, require_capability
 from app.bootstrap.di import (
     CancelPublicationDep,
     CreatePublicationDep,
+    PublicationMetricsAgentDep,
     PublishChannelAgentDep,
     ReleaseScheduledPublicationsForTenantDep,
 )
@@ -67,6 +74,7 @@ class PublicationResponse(BaseModel):
     permalink: str | None
     attempts: int
     last_error: str | None
+    metrics: dict[str, Any] | None
     created_at: datetime
 
     @staticmethod
@@ -81,6 +89,7 @@ class PublicationResponse(BaseModel):
             permalink=p.permalink,
             attempts=p.attempts,
             last_error=p.last_error,
+            metrics=p.metrics,
             created_at=p.created_at,
         )
 
@@ -159,3 +168,16 @@ async def cancel_publication(
         cancelled_by=principal.user_id,
     )
     return PublicationResponse.from_entity(publication)
+
+
+@router.post(
+    "/publications/fetch-metrics-next",
+    response_model=PublicationResponse | None,
+    dependencies=_manage,
+)
+async def fetch_metrics_next(
+    principal: PrincipalDep, agent: PublicationMetricsAgentDep
+) -> PublicationResponse | None:
+    assert principal.tenant_id is not None
+    publication = await agent.run(tenant_id=principal.tenant_id)
+    return PublicationResponse.from_entity(publication) if publication is not None else None

@@ -657,6 +657,8 @@ publications_table = Table(
     Column("payload", JSONB(), nullable=False),
     Column("attempts", Integer(), nullable=False),
     Column("last_error", Text(), nullable=True),
+    Column("metrics", JSONB(), nullable=True),
+    Column("metrics_fetched_at", DateTime(timezone=True), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )

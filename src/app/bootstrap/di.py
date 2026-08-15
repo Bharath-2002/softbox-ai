@@ -24,6 +24,7 @@ from app.agents.catalog_image_qc import CatalogImageQcAgent
 from app.agents.copywriting import CopywritingAgent
 from app.agents.generation_render import GenerationRenderAgent
 from app.agents.input_image_validation import InputImageValidationAgent
+from app.agents.publication_metrics import PublicationMetricsAgent
 from app.agents.publish_channel import PublishChannelAgent
 from app.agents.template_analysis import TemplateAnalysisAgent
 from app.api.deps.authorization import get_token_issuer
@@ -77,12 +78,18 @@ from app.features.products.list_products import ListProducts
 from app.features.products.recompute_product_readiness import RecomputeProductReadiness
 from app.features.products.start_input_image_validation import StartInputImageValidation
 from app.features.publishing.cancel_publication import CancelPublication
+from app.features.publishing.complete_publication_metrics_fetch import (
+    CompletePublicationMetricsFetch,
+)
 from app.features.publishing.complete_publication_publish import CompletePublicationPublish
 from app.features.publishing.create_publication import CreatePublication
 from app.features.publishing.defer_publication_publish import DeferPublicationPublish
 from app.features.publishing.fail_publication_publish import FailPublicationPublish
 from app.features.publishing.release_scheduled_publications import (
     ReleaseScheduledPublicationsForTenant,
+)
+from app.features.publishing.start_publication_metrics_fetch import (
+    StartPublicationMetricsFetch,
 )
 from app.features.publishing.start_publication_publish import StartPublicationPublish
 from app.features.settings.resolve_setting import ResolveSetting
@@ -622,6 +629,28 @@ def get_cancel_publication(uow_factory: UowFactoryDep, clock: ClockDep) -> Cance
     return CancelPublication(uow_factory, clock)
 
 
+def get_start_publication_metrics_fetch(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> StartPublicationMetricsFetch:
+    return StartPublicationMetricsFetch(uow_factory, clock)
+
+
+def get_complete_publication_metrics_fetch(
+    uow_factory: UowFactoryDep, clock: ClockDep
+) -> CompletePublicationMetricsFetch:
+    return CompletePublicationMetricsFetch(uow_factory, clock)
+
+
+def get_publication_metrics_agent(
+    start: Annotated[StartPublicationMetricsFetch, Depends(get_start_publication_metrics_fetch)],
+    complete: Annotated[
+        CompletePublicationMetricsFetch, Depends(get_complete_publication_metrics_fetch)
+    ],
+    channel_publisher: Annotated[ChannelPublisher, Depends(get_channel_publisher)],
+) -> PublicationMetricsAgent:
+    return PublicationMetricsAgent(start, complete, channel_publisher)
+
+
 def get_publish_channel_agent(
     request: Request,
     start: Annotated[StartPublicationPublish, Depends(get_start_publication_publish)],
@@ -781,6 +810,9 @@ ReleaseScheduledPublicationsForTenantDep = Annotated[
     Depends(get_release_scheduled_publications_for_tenant),
 ]
 CancelPublicationDep = Annotated[CancelPublication, Depends(get_cancel_publication)]
+PublicationMetricsAgentDep = Annotated[
+    PublicationMetricsAgent, Depends(get_publication_metrics_agent)
+]
 ApproveContentDraftDep = Annotated[ApproveContentDraft, Depends(get_approve_content_draft)]
 RejectContentDraftDep = Annotated[RejectContentDraft, Depends(get_reject_content_draft)]
 ListContentDraftsForVariantDep = Annotated[

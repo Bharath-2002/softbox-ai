@@ -45,6 +45,22 @@ class InMemoryPublicationRepository:
         matches.sort(key=lambda row: row.due_at)
         return matches[:limit]
 
+    async def claim_for_metrics_fetch(
+        self, tenant_id: TenantId, *, before: datetime
+    ) -> Publication | None:
+        matches = [
+            row
+            for (tid, _), row in self._rows.items()
+            if tid == tenant_id
+            and row.status is PublicationStatus.PUBLISHED
+            and row.external_post_id is not None
+            and (row.metrics_fetched_at is None or row.metrics_fetched_at <= before)
+        ]
+        if not matches:
+            return None
+        matches.sort(key=lambda row: row.published_at or before)
+        return matches[0]
+
     async def add(self, publication: Publication) -> None:
         self._rows[(publication.tenant_id, publication.id)] = publication
 

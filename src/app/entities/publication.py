@@ -61,6 +61,14 @@ unsatisfiable limit" tradeoff, which still applies unchanged.
 (`scheduled --> cancelled`) — a publication already `DISPATCHING` or
 later cannot be cancelled, since a provider call may already be in
 flight or done.
+
+``metrics``/``metrics_fetched_at`` (added by `f19bde677376_add_publication_
+metrics`) back D21's `ChannelPublisher.fetch_metrics` — a `PUBLISHED` row
+only, no status transition. `mark_metrics_fetch_attempted()` bumps
+`metrics_fetched_at` at claim time (before the provider call), the same
+"push the field that gates re-selection, in the claiming transaction"
+shape `defer_dispatch()` established — a provider failure must not cause
+the very next sweep to immediately re-select the same row.
 """
 
 from __future__ import annotations
@@ -107,6 +115,8 @@ class Publication:
     payload: dict[str, Any]
     attempts: int
     last_error: str | None
+    metrics: dict[str, Any] | None
+    metrics_fetched_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -136,6 +146,8 @@ class Publication:
             payload=payload,
             attempts=0,
             last_error=None,
+            metrics=None,
+            metrics_fetched_at=None,
             created_at=now,
             updated_at=now,
         )
@@ -201,4 +213,16 @@ class Publication:
         if self.status != PublicationStatus.SCHEDULED:
             raise ValidationError(f"Cannot cancel from status {self.status.value!r}.")
         self.status = PublicationStatus.CANCELLED
+        self.updated_at = now
+
+    def mark_metrics_fetch_attempted(self, *, now: datetime) -> None:
+        if self.status != PublicationStatus.PUBLISHED:
+            raise ValidationError(f"Cannot fetch metrics from status {self.status.value!r}.")
+        self.metrics_fetched_at = now
+        self.updated_at = now
+
+    def record_metrics(self, *, metrics: dict[str, Any], now: datetime) -> None:
+        if self.status != PublicationStatus.PUBLISHED:
+            raise ValidationError(f"Cannot fetch metrics from status {self.status.value!r}.")
+        self.metrics = metrics
         self.updated_at = now

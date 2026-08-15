@@ -302,6 +302,60 @@ async def test_list_due_for_release_ignores_a_not_yet_due_publication(ctx: Conte
     assert due == []
 
 
+async def test_claim_for_metrics_fetch_finds_a_never_fetched_published_row(ctx: Context) -> None:
+    now = utcnow()
+    publication = _publication(ctx)
+    publication.mark_dispatching(now=now)
+    publication.mark_published(external_post_id="post-1", permalink=None, now=now)
+    await ctx.publications.add(publication)
+
+    claimed = await ctx.publications.claim_for_metrics_fetch(ctx.tenant_id, before=now)
+
+    assert claimed is not None
+    assert claimed.id == publication.id
+
+
+async def test_claim_for_metrics_fetch_finds_a_stale_row(ctx: Context) -> None:
+    now = utcnow()
+    publication = _publication(ctx)
+    publication.mark_dispatching(now=now)
+    publication.mark_published(external_post_id="post-1", permalink=None, now=now)
+    publication.mark_metrics_fetch_attempted(now=now - timedelta(hours=2))
+    await ctx.publications.add(publication)
+
+    claimed = await ctx.publications.claim_for_metrics_fetch(
+        ctx.tenant_id, before=now - timedelta(hours=1)
+    )
+
+    assert claimed is not None
+    assert claimed.id == publication.id
+
+
+async def test_claim_for_metrics_fetch_ignores_a_recently_fetched_row(ctx: Context) -> None:
+    now = utcnow()
+    publication = _publication(ctx)
+    publication.mark_dispatching(now=now)
+    publication.mark_published(external_post_id="post-1", permalink=None, now=now)
+    publication.mark_metrics_fetch_attempted(now=now)
+    await ctx.publications.add(publication)
+
+    claimed = await ctx.publications.claim_for_metrics_fetch(
+        ctx.tenant_id, before=now - timedelta(hours=1)
+    )
+
+    assert claimed is None
+
+
+async def test_claim_for_metrics_fetch_ignores_a_row_that_is_not_published(ctx: Context) -> None:
+    now = utcnow()
+    publication = _publication(ctx)
+    await ctx.publications.add(publication)
+
+    claimed = await ctx.publications.claim_for_metrics_fetch(ctx.tenant_id, before=now)
+
+    assert claimed is None
+
+
 async def test_update_persists_a_status_transition(ctx: Context) -> None:
     publication = _publication(ctx)
     await ctx.publications.add(publication)

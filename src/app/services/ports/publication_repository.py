@@ -16,6 +16,13 @@ publication whose `due_at` has passed, locked with `SKIP LOCKED` the same
 way `GenerationRequestRepository.list_running_for_update` locks its own
 sweep candidates, so two concurrent sweeps for one tenant partition rather
 than double-release the same row.
+
+`claim_for_metrics_fetch` backs `StartPublicationMetricsFetch`: the oldest
+`published` row whose `metrics_fetched_at` is unset or past `before`,
+locked with the same `SKIP LOCKED` shape. A single row, not a batch list —
+`fetch_metrics` is an external call, so this claims one at a time the way
+`TaskQueue.claim` does, not a batch reconciler sweep like
+`list_due_for_release`.
 """
 
 from __future__ import annotations
@@ -39,6 +46,10 @@ class PublicationRepository(Protocol):
     async def list_due_for_release(
         self, tenant_id: TenantId, *, before: datetime, limit: int
     ) -> list[Publication]: ...
+
+    async def claim_for_metrics_fetch(
+        self, tenant_id: TenantId, *, before: datetime
+    ) -> Publication | None: ...
 
     async def add(self, publication: Publication) -> None: ...
 
