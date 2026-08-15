@@ -63,9 +63,7 @@ async def test_list_for_tenant_excludes_another_tenants_domain(
     await _seed_tenant(owner_uow, tenant_b)
 
     async with owner_uow(tenant_a) as uow:
-        own = TenantDomain.create(
-            tenant_a, f"a-shop-{tenant_a.hex[:12]}.example.com", now=utcnow()
-        )
+        own = TenantDomain.create(tenant_a, f"a-shop-{tenant_a.hex[:12]}.example.com", now=utcnow())
         await uow.tenant_domains.add(own)
     async with owner_uow(tenant_b) as uow:
         await uow.tenant_domains.add(

@@ -112,6 +112,7 @@ from app.features.taxonomy.list_catalog_slot_input_requirements import (
 )
 from app.features.taxonomy.list_category_children import ListCategoryChildren
 from app.features.taxonomy.list_input_image_slots import ListInputImageSlots
+from app.features.taxonomy.list_public_category_children import ListPublicCategoryChildren
 from app.features.taxonomy.list_variant_axes import ListVariantAxes
 from app.features.taxonomy.list_variant_axis_values import ListVariantAxisValues
 from app.features.taxonomy.move_category import MoveCategory
@@ -135,6 +136,7 @@ from app.features.templates.seed_stock_presets import SeedStockPresets
 from app.features.templates.start_template_analysis import StartTemplateAnalysis
 from app.features.tenancy.list_tenant_domains import ListTenantDomains
 from app.features.tenancy.register_tenant_domain import RegisterTenantDomain
+from app.features.tenancy.resolve_tenant_from_host import ResolveTenantFromHost
 from app.services.ports.channel_publisher import ChannelPublisher
 from app.services.ports.content_moderation import ContentModerationScanner
 from app.services.ports.identity_provider import IdentityProvider
@@ -714,6 +716,16 @@ def get_list_tenant_domains(uow_factory: UowFactoryDep) -> ListTenantDomains:
     return ListTenantDomains(uow_factory)
 
 
+def get_resolve_tenant_from_host(uow_factory: UowFactoryDep) -> ResolveTenantFromHost:
+    return ResolveTenantFromHost(uow_factory)
+
+
+def get_list_public_category_children(
+    uow_factory: UowFactoryDep,
+) -> ListPublicCategoryChildren:
+    return ListPublicCategoryChildren(uow_factory)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -831,3 +843,7 @@ ListContentDraftsForVariantDep = Annotated[
 EditContentDraftDep = Annotated[EditContentDraft, Depends(get_edit_content_draft)]
 RegisterTenantDomainDep = Annotated[RegisterTenantDomain, Depends(get_register_tenant_domain)]
 ListTenantDomainsDep = Annotated[ListTenantDomains, Depends(get_list_tenant_domains)]
+ResolveTenantFromHostDep = Annotated[ResolveTenantFromHost, Depends(get_resolve_tenant_from_host)]
+ListPublicCategoryChildrenDep = Annotated[
+    ListPublicCategoryChildren, Depends(get_list_public_category_children)
+]
