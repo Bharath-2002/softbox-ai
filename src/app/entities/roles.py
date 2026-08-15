@@ -39,9 +39,19 @@ _MANAGER_CAPABILITIES: frozenset[Capability] = frozenset(
 
 ROLE_CAPABILITIES: dict[Role, frozenset[Capability]] = {
     Role.OWNER: _MANAGER_CAPABILITIES
-    | {Capability.CATALOG_APPROVE, Capability.MEMBER_MANAGE, Capability.SETTINGS_MANAGE},
+    | {
+        Capability.CATALOG_APPROVE,
+        Capability.MEMBER_MANAGE,
+        Capability.SETTINGS_MANAGE,
+        Capability.DOMAINS_MANAGE,
+    },
     Role.ADMIN: _MANAGER_CAPABILITIES
-    | {Capability.CATALOG_APPROVE, Capability.MEMBER_MANAGE, Capability.SETTINGS_MANAGE},
+    | {
+        Capability.CATALOG_APPROVE,
+        Capability.MEMBER_MANAGE,
+        Capability.SETTINGS_MANAGE,
+        Capability.DOMAINS_MANAGE,
+    },
     Role.CATALOG_MANAGER: _MANAGER_CAPABILITIES,
     Role.APPROVER: frozenset({Capability.CATALOG_APPROVE}),
     Role.VIEWER: frozenset(),

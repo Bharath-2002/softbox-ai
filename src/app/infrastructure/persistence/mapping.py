@@ -70,6 +70,7 @@ from app.entities.roles import Role
 from app.entities.session import Session
 from app.entities.setting import Setting, SettingScope
 from app.entities.social_account import SocialAccount, SocialAccountStatus
+from app.entities.tenant_domain import TenantDomain
 from app.entities.tenant_membership import TenantMembership
 from app.entities.user import User
 from app.entities.variant_axis import VariantAxis, VariantAxisValue
@@ -663,6 +664,18 @@ publications_table = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+tenant_domains_table = Table(
+    "tenant_domains",
+    metadata,
+    Column("id", Uuid(), primary_key=True),
+    Column("tenant_id", Uuid(), nullable=False),
+    Column("hostname", Text(), nullable=False),
+    Column("is_primary", Boolean(), nullable=False),
+    Column("verified", Boolean(), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # No entity class - a grant, not a rich domain object. Queried via Core
 # directly by SqlPlatformAdminRepository rather than through the ORM.
 platform_admins_table = Table(
@@ -786,4 +799,5 @@ def start_mappers() -> None:
     mapper_registry.map_imperatively(ContentDraft, content_drafts_table)
     mapper_registry.map_imperatively(SocialAccount, social_accounts_table)
     mapper_registry.map_imperatively(Publication, publications_table)
+    mapper_registry.map_imperatively(TenantDomain, tenant_domains_table)
     _mapped = True

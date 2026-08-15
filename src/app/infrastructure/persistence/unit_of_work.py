@@ -73,6 +73,7 @@ from app.infrastructure.persistence.session_repository import SqlSessionReposito
 from app.infrastructure.persistence.settings_repository import SqlSettingsRepository
 from app.infrastructure.persistence.social_account_repository import SqlSocialAccountRepository
 from app.infrastructure.persistence.task_queue import SqlTaskQueue
+from app.infrastructure.persistence.tenant_domain_repository import SqlTenantDomainRepository
 from app.infrastructure.persistence.tenant_membership_repository import (
     SqlTenantMembershipRepository,
 )
@@ -111,6 +112,7 @@ from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
 from app.services.ports.social_account_repository import SocialAccountRepository
 from app.services.ports.task_queue import TaskQueue
+from app.services.ports.tenant_domain_repository import TenantDomainRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.tenant_repository import TenantRepository
 from app.services.ports.user_repository import UserRepository
@@ -170,6 +172,7 @@ class SqlUnitOfWork:
         self._content_drafts: SqlContentDraftRepository | None = None
         self._social_accounts: SqlSocialAccountRepository | None = None
         self._publications: SqlPublicationRepository | None = None
+        self._tenant_domains: SqlTenantDomainRepository | None = None
 
     @property
     def session(self) -> AsyncSession:
@@ -367,6 +370,12 @@ class SqlUnitOfWork:
             self._publications = SqlPublicationRepository(self.session)
         return self._publications
 
+    @property
+    def tenant_domains(self) -> TenantDomainRepository:
+        if self._tenant_domains is None:
+            self._tenant_domains = SqlTenantDomainRepository(self.session)
+        return self._tenant_domains
+
     async def __aenter__(self) -> SqlUnitOfWork:
         session = self._session_factory()
         await session.begin()
@@ -425,6 +434,7 @@ class SqlUnitOfWork:
             self._content_drafts = None
             self._social_accounts = None
             self._publications = None
+            self._tenant_domains = None
 
 
 def make_unit_of_work_factory(

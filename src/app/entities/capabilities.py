@@ -20,3 +20,4 @@ class Capability(StrEnum):
     MEMBER_MANAGE = "member.manage"
     SETTINGS_MANAGE = "settings.manage"
     TAXONOMY_MANAGE = "taxonomy.manage"
+    DOMAINS_MANAGE = "domains.manage"

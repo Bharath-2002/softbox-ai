@@ -133,6 +133,8 @@ from app.features.templates.fail_template_analysis import FailTemplateAnalysis
 from app.features.templates.list_templates import ListTemplates
 from app.features.templates.seed_stock_presets import SeedStockPresets
 from app.features.templates.start_template_analysis import StartTemplateAnalysis
+from app.features.tenancy.list_tenant_domains import ListTenantDomains
+from app.features.tenancy.register_tenant_domain import RegisterTenantDomain
 from app.services.ports.channel_publisher import ChannelPublisher
 from app.services.ports.content_moderation import ContentModerationScanner
 from app.services.ports.identity_provider import IdentityProvider
@@ -704,6 +706,14 @@ def get_reconcile_generation_requests_for_tenant(
     return ReconcileGenerationRequestsForTenant(uow_factory, clock)
 
 
+def get_register_tenant_domain(uow_factory: UowFactoryDep, clock: ClockDep) -> RegisterTenantDomain:
+    return RegisterTenantDomain(uow_factory, clock)
+
+
+def get_list_tenant_domains(uow_factory: UowFactoryDep) -> ListTenantDomains:
+    return ListTenantDomains(uow_factory)
+
+
 CreateCategoryDep = Annotated[CreateCategory, Depends(get_create_category)]
 UpdateCategoryDep = Annotated[UpdateCategory, Depends(get_update_category)]
 MoveCategoryDep = Annotated[MoveCategory, Depends(get_move_category)]
@@ -819,3 +829,5 @@ ListContentDraftsForVariantDep = Annotated[
     ListContentDraftsForVariant, Depends(get_list_content_drafts_for_variant)
 ]
 EditContentDraftDep = Annotated[EditContentDraft, Depends(get_edit_content_draft)]
+RegisterTenantDomainDep = Annotated[RegisterTenantDomain, Depends(get_register_tenant_domain)]
+ListTenantDomainsDep = Annotated[ListTenantDomains, Depends(get_list_tenant_domains)]

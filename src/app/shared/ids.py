@@ -34,6 +34,7 @@ CatalogImageId = NewType("CatalogImageId", uuid.UUID)
 ContentDraftId = NewType("ContentDraftId", uuid.UUID)
 SocialAccountId = NewType("SocialAccountId", uuid.UUID)
 PublicationId = NewType("PublicationId", uuid.UUID)
+TenantDomainId = NewType("TenantDomainId", uuid.UUID)
 
 
 def new_tenant_id() -> TenantId:
@@ -130,3 +131,7 @@ def new_social_account_id() -> SocialAccountId:
 
 def new_publication_id() -> PublicationId:
     return PublicationId(uuid.uuid4())
+
+
+def new_tenant_domain_id() -> TenantDomainId:
+    return TenantDomainId(uuid.uuid4())

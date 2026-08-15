@@ -63,6 +63,7 @@ from app.services.ports.session_repository import SessionRepository
 from app.services.ports.settings_repository import SettingsRepository
 from app.services.ports.social_account_repository import SocialAccountRepository
 from app.services.ports.task_queue import TaskQueue
+from app.services.ports.tenant_domain_repository import TenantDomainRepository
 from app.services.ports.tenant_membership_repository import TenantMembershipRepository
 from app.services.ports.tenant_repository import TenantRepository
 from app.services.ports.user_repository import UserRepository
@@ -164,6 +165,9 @@ class UnitOfWork(Protocol):
 
     @property
     def publications(self) -> PublicationRepository: ...
+
+    @property
+    def tenant_domains(self) -> TenantDomainRepository: ...
 
     async def __aenter__(self) -> UnitOfWork:
         """Begin the transaction and apply the tenant scope."""

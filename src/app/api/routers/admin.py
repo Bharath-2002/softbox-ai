@@ -24,6 +24,7 @@ from app.api.routers import (
     admin_settings,
     admin_taxonomy,
     admin_templates,
+    admin_tenant_domains,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_tenant_context)])
@@ -38,3 +39,4 @@ router.include_router(admin_generation.router)
 router.include_router(admin_catalog_images.router)
 router.include_router(admin_content.router)
 router.include_router(admin_publishing.router)
+router.include_router(admin_tenant_domains.router)

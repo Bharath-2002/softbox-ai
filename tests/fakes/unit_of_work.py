@@ -42,6 +42,7 @@ from tests.fakes.session_repository import InMemorySessionRepository
 from tests.fakes.settings_repository import InMemorySettingsRepository
 from tests.fakes.social_account_repository import InMemorySocialAccountRepository
 from tests.fakes.task_queue import InMemoryTaskQueue
+from tests.fakes.tenant_domain_repository import InMemoryTenantDomainRepository
 from tests.fakes.tenant_membership_repository import InMemoryTenantMembershipRepository
 from tests.fakes.tenant_repository import InMemoryTenantRepository
 from tests.fakes.user_repository import InMemoryUserRepository
@@ -84,6 +85,7 @@ class FakeUnitOfWork:
         content_drafts: InMemoryContentDraftRepository,
         social_accounts: InMemorySocialAccountRepository,
         publications: InMemoryPublicationRepository,
+        tenant_domains: InMemoryTenantDomainRepository,
         tenant_id: TenantId | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -118,6 +120,7 @@ class FakeUnitOfWork:
         self.content_drafts = content_drafts
         self.social_accounts = social_accounts
         self.publications = publications
+        self.tenant_domains = tenant_domains
         self.committed = False
         self.rolled_back = False
 
@@ -174,6 +177,7 @@ class FakeUnitOfWorkFactory:
         self.content_drafts = InMemoryContentDraftRepository()
         self.social_accounts = InMemorySocialAccountRepository()
         self.publications = InMemoryPublicationRepository()
+        self.tenant_domains = InMemoryTenantDomainRepository()
 
     def __call__(self, tenant_id: TenantId | None = None) -> FakeUnitOfWork:
         return FakeUnitOfWork(
@@ -208,6 +212,7 @@ class FakeUnitOfWorkFactory:
             content_drafts=self.content_drafts,
             social_accounts=self.social_accounts,
             publications=self.publications,
+            tenant_domains=self.tenant_domains,
             tenant_id=tenant_id,
         )
 
