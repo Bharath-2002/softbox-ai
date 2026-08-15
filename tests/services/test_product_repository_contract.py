@@ -15,7 +15,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.entities.product import Product
+from app.entities.product import Product, ProductStatus
 from app.infrastructure.persistence.database import create_engine, create_session_factory
 from app.infrastructure.persistence.product_repository import SqlProductRepository
 from app.services.ports.product_repository import ProductRepository
@@ -254,3 +254,30 @@ async def test_list_page_with_no_category_filter_spans_categories(ctx: Context) 
     page = await ctx.products.list_page(ctx.tenant_id, None, after=None, limit=10)
 
     assert {p.id for p in page} == {in_category.id, in_other_category.id}
+
+
+async def test_list_published_page_excludes_a_draft_product(ctx: Context) -> None:
+    published = _product(ctx)
+    published.status = ProductStatus.PUBLISHED
+    draft = _product(ctx)
+    await ctx.products.add(published)
+    await ctx.products.add(draft)
+
+    page = await ctx.products.list_published_page(ctx.tenant_id, None, after=None, limit=10)
+
+    assert [p.id for p in page] == [published.id]
+
+
+async def test_list_published_page_respects_the_category_filter(ctx: Context) -> None:
+    in_category = _product(ctx)
+    in_category.status = ProductStatus.PUBLISHED
+    in_other_category = _product(ctx, category_id=ctx.other_category_id)
+    in_other_category.status = ProductStatus.PUBLISHED
+    await ctx.products.add(in_category)
+    await ctx.products.add(in_other_category)
+
+    page = await ctx.products.list_published_page(
+        ctx.tenant_id, ctx.category_id, after=None, limit=10
+    )
+
+    assert [p.id for p in page] == [in_category.id]

@@ -48,3 +48,21 @@ class ProductRepository(Protocol):
         trimming or cursor-encoding of its own, matching ``Page``'s own
         division of labour."""
         ...
+
+    async def list_published_page(
+        self,
+        tenant_id: TenantId,
+        category_id: CategoryId | None,
+        *,
+        after: Cursor | None,
+        limit: int,
+    ) -> list[Product]:
+        """The storefront's view of ``list_page``: ``status ==
+        ProductStatus.PUBLISHED`` only, filtered at the query itself rather
+        than by the caller — a cursor-paginated method that filtered after
+        fetching would return short pages and break ``has_more`` for
+        exactly the rows this method exists to exclude. A separate method
+        rather than a ``status`` parameter on ``list_page``, matching
+        ``ListPublicCategoryChildren``'s reasoning: a shared method with a
+        visibility flag lets a future caller forget to set it."""
+        ...

@@ -17,8 +17,16 @@ from app.bootstrap.app import create_app
 from app.bootstrap.di import get_clock, get_uow_factory
 from app.bootstrap.settings import Settings
 from app.entities.category import Category
+from app.entities.product import Product, ProductStatus
 from app.entities.tenant_domain import TenantDomain
-from app.shared.ids import new_tenant_id
+from app.shared.ids import (
+    TenantId,
+    new_category_id,
+    new_category_spec_version_id,
+    new_product_id,
+    new_tenant_id,
+    new_user_id,
+)
 from tests.fakes.clock import FakeClock
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
 
@@ -114,3 +122,101 @@ async def test_the_host_header_port_is_ignored() -> None:
         )
 
     assert response.status_code == 200
+
+
+def _published_product(tenant_id: TenantId, title: str) -> Product:
+    product = Product.create(
+        tenant_id,
+        new_category_id(),
+        new_category_spec_version_id(),
+        attributes={},
+        created_by=new_user_id(),
+        now=_NOW,
+        title=title,
+    )
+    product.status = ProductStatus.PUBLISHED
+    return product
+
+
+async def test_listing_products_only_returns_published_ones() -> None:
+    app, uow_factory = _build()
+    tenant_id = new_tenant_id()
+    await uow_factory.tenant_domains.add(
+        TenantDomain.create(tenant_id, "shop.example.com", now=_NOW)
+    )
+    published = _published_product(tenant_id, "Maroon silk saree")
+    draft = Product.create(
+        tenant_id,
+        new_category_id(),
+        new_category_spec_version_id(),
+        attributes={},
+        created_by=new_user_id(),
+        now=_NOW,
+        title="Unfinished listing",
+    )
+    await uow_factory.products.add(published)
+    await uow_factory.products.add(draft)
+
+    async with await _client(app) as http:
+        response = await http.get("/api/v1/public/products", headers={"Host": "shop.example.com"})
+
+    titles = [row["title"] for row in response.json()["items"]]
+    assert titles == ["Maroon silk saree"]
+
+
+async def test_getting_a_published_product_by_id() -> None:
+    app, uow_factory = _build()
+    tenant_id = new_tenant_id()
+    await uow_factory.tenant_domains.add(
+        TenantDomain.create(tenant_id, "shop.example.com", now=_NOW)
+    )
+    product = _published_product(tenant_id, "Maroon silk saree")
+    await uow_factory.products.add(product)
+
+    async with await _client(app) as http:
+        response = await http.get(
+            f"/api/v1/public/products/{product.id}", headers={"Host": "shop.example.com"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Maroon silk saree"
+
+
+async def test_a_tenants_storefront_never_returns_another_tenants_product_by_id() -> None:
+    """M8's Gate, in its literal wording: resolving tenant A's host and
+    requesting tenant B's known product id must not return tenant B's data
+    — it must behave exactly as if that id never existed."""
+    app, uow_factory = _build()
+    tenant_a = new_tenant_id()
+    tenant_b = new_tenant_id()
+    await uow_factory.tenant_domains.add(
+        TenantDomain.create(tenant_a, "a-shop.example.com", now=_NOW)
+    )
+    await uow_factory.tenant_domains.add(
+        TenantDomain.create(tenant_b, "b-shop.example.com", now=_NOW)
+    )
+    tenant_bs_product = _published_product(tenant_b, "Tenant B's saree")
+    await uow_factory.products.add(tenant_bs_product)
+
+    async with await _client(app) as http:
+        response = await http.get(
+            f"/api/v1/public/products/{tenant_bs_product.id}",
+            headers={"Host": "a-shop.example.com"},
+        )
+
+    assert response.status_code == 404
+
+
+async def test_an_unknown_product_id_is_not_found() -> None:
+    app, uow_factory = _build()
+    tenant_id = new_tenant_id()
+    await uow_factory.tenant_domains.add(
+        TenantDomain.create(tenant_id, "shop.example.com", now=_NOW)
+    )
+
+    async with await _client(app) as http:
+        response = await http.get(
+            f"/api/v1/public/products/{new_product_id()}", headers={"Host": "shop.example.com"}
+        )
+
+    assert response.status_code == 404

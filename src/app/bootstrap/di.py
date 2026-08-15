@@ -74,7 +74,9 @@ from app.features.products.create_generation_request import CreateGenerationRequ
 from app.features.products.create_product import CreateProduct
 from app.features.products.create_product_variant import CreateProductVariant
 from app.features.products.fan_out_generation_items import FanOutGenerationItems
+from app.features.products.get_public_product import GetPublicProduct
 from app.features.products.list_products import ListProducts
+from app.features.products.list_public_products import ListPublicProducts
 from app.features.products.recompute_product_readiness import RecomputeProductReadiness
 from app.features.products.start_input_image_validation import StartInputImageValidation
 from app.features.publishing.cancel_publication import CancelPublication
@@ -419,6 +421,14 @@ def get_capture_product_input_image(
 
 def get_list_products(uow_factory: UowFactoryDep) -> ListProducts:
     return ListProducts(uow_factory)
+
+
+def get_list_public_products(uow_factory: UowFactoryDep) -> ListPublicProducts:
+    return ListPublicProducts(uow_factory)
+
+
+def get_public_product(uow_factory: UowFactoryDep) -> GetPublicProduct:
+    return GetPublicProduct(uow_factory)
 
 
 def get_create_generation_request(
@@ -799,6 +809,8 @@ CaptureProductInputImageDep = Annotated[
     CaptureProductInputImage, Depends(get_capture_product_input_image)
 ]
 ListProductsDep = Annotated[ListProducts, Depends(get_list_products)]
+ListPublicProductsDep = Annotated[ListPublicProducts, Depends(get_list_public_products)]
+GetPublicProductDep = Annotated[GetPublicProduct, Depends(get_public_product)]
 CreateGenerationRequestDep = Annotated[
     CreateGenerationRequest, Depends(get_create_generation_request)
 ]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.entities.product import Product
+from app.entities.product import Product, ProductStatus
 from app.shared.ids import CategoryId, ProductId, TenantId
 from app.shared.pagination import Cursor
 
@@ -42,6 +42,27 @@ class InMemoryProductRepository:
             row
             for (tid, _), row in self._rows.items()
             if tid == tenant_id and (category_id is None or row.category_id == category_id)
+        ]
+        matches.sort(key=lambda row: (row.created_at, row.id))
+        if after is not None:
+            after_key = (datetime.fromisoformat(after.sort_key), after.id)
+            matches = [row for row in matches if (row.created_at, row.id) > after_key]
+        return matches[:limit]
+
+    async def list_published_page(
+        self,
+        tenant_id: TenantId,
+        category_id: CategoryId | None,
+        *,
+        after: Cursor | None,
+        limit: int,
+    ) -> list[Product]:
+        matches = [
+            row
+            for (tid, _), row in self._rows.items()
+            if tid == tenant_id
+            and row.status is ProductStatus.PUBLISHED
+            and (category_id is None or row.category_id == category_id)
         ]
         matches.sort(key=lambda row: (row.created_at, row.id))
         if after is not None:

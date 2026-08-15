@@ -7,23 +7,33 @@ tenant from the request's Host header (CLAUDE.md §9, D4) against
 ``PrincipalDep``/``require_tenant_context``, minus any notion of a signed-in
 user.
 
-Categories are the first route: no pricing or PII sensitivity, and its read
+Categories were the first route: no pricing or PII sensitivity, and its read
 model (``ListPublicCategoryChildren``) already existed as a variant of the
-admin one, so this route proves the resolver end to end without also
-needing a new read model built at the same time. Products and published
-catalog images follow in the next chunk, reusing the same
-``PublicTenantIdDep``.
+admin one, so it proved the resolver end to end without also needing a new
+read model at the same time. Products follow the same shape:
+``ProductStatus.PUBLISHED`` is this catalog's "visible to a shopper" state,
+filtered at the repository query (``list_published_page``) rather than
+after fetching, so cursor pagination's own page-boundary accounting stays
+correct for the rows it excludes. Published catalog images are the next
+chunk.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.deps.tenant_resolution import PublicTenantIdDep
-from app.bootstrap.di import ListPublicCategoryChildrenDep
+from app.bootstrap.di import (
+    GetPublicProductDep,
+    ListPublicCategoryChildrenDep,
+    ListPublicProductsDep,
+)
 from app.entities.category import Category
-from app.shared.ids import CategoryId
+from app.entities.product import Product
+from app.shared.ids import CategoryId, ProductId
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -61,3 +71,62 @@ async def list_categories(
 ) -> list[PublicCategoryResponse]:
     categories = await use_case(tenant_id=tenant_id, parent_id=parent_id)
     return [PublicCategoryResponse.from_entity(category) for category in categories]
+
+
+class PublicProductResponse(BaseModel):
+    """No ``spec_version_id`` (internal FK) and no ``sku`` (warehouse-facing,
+    not shopper-facing) — everything else admin's ``ProductResponse``
+    exposes is exactly what a storefront product page needs.
+
+    ``attributes`` is exposed wholesale, though: a category spec (D9/D10)
+    can declare fields with no shopper-facing meaning (internal cost,
+    supplier notes), and nothing here filters by a field's own visibility.
+    No spec field is marked internal-vs-public yet, so there is nothing to
+    filter *on* — a known widening, not an oversight, until a spec-level
+    visibility flag exists to filter by."""
+
+    id: ProductId
+    category_id: CategoryId
+    attributes: dict[str, Any]
+    title: str | None
+    price_amount: int | None
+    price_currency: str | None
+
+    @staticmethod
+    def from_entity(product: Product) -> PublicProductResponse:
+        return PublicProductResponse(
+            id=product.id,
+            category_id=product.category_id,
+            attributes=product.attributes,
+            title=product.title,
+            price_amount=product.price_amount,
+            price_currency=product.price_currency,
+        )
+
+
+class PublicProductPageResponse(BaseModel):
+    items: list[PublicProductResponse]
+    next_cursor: str | None
+
+
+@router.get("/products", response_model=PublicProductPageResponse)
+async def list_products(
+    tenant_id: PublicTenantIdDep,
+    use_case: ListPublicProductsDep,
+    category_id: CategoryId | None = None,
+    cursor: str | None = None,
+    limit: int = 20,
+) -> PublicProductPageResponse:
+    page = await use_case(tenant_id=tenant_id, category_id=category_id, cursor=cursor, limit=limit)
+    return PublicProductPageResponse(
+        items=[PublicProductResponse.from_entity(p) for p in page.items],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.get("/products/{product_id}", response_model=PublicProductResponse)
+async def get_product(
+    product_id: ProductId, tenant_id: PublicTenantIdDep, use_case: GetPublicProductDep
+) -> PublicProductResponse:
+    product = await use_case(tenant_id=tenant_id, product_id=product_id)
+    return PublicProductResponse.from_entity(product)
