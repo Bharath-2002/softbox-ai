@@ -13,7 +13,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api import health
 from app.api.errors import register_exception_handlers
-from app.api.middleware import RequestContextMiddleware
+from app.api.middleware import PublicCacheHeadersMiddleware, RequestContextMiddleware
 from app.api.routers import admin, auth, platform, public, webhooks
 from app.bootstrap.settings import Settings, get_settings
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
@@ -64,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
 
     app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(PublicCacheHeadersMiddleware)
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,
