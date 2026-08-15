@@ -1,10 +1,12 @@
 """Records a failed `ChannelPublisher.publish`/`validate` call and asks
 `TaskQueue.fail` to decide retry-vs-dead. If the job comes back `dead`,
 `Publication.record_attempt_failure(terminal=True)` moves the row to its
-own terminal `FAILED` state in the same transaction — the two trackers
-must never disagree about whether another attempt is still coming, the
-same discipline `FailGenerationItemRender` already established for
-`generation_items`/`dead`.
+own terminal `DEAD` state in the same transaction — the two trackers must
+never disagree about whether another attempt is still coming, the same
+discipline `FailGenerationItemRender` already established for
+`generation_items`/`dead`. A non-terminal failure moves to `FAILED`, the
+transient retry-pending state — `TaskQueue`'s own backoff-rescheduled job
+is what drives the `failed -> dispatching` retry, not this use case.
 """
 
 from __future__ import annotations

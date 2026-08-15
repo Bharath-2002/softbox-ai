@@ -9,34 +9,58 @@ again — the single fact the Gate's "a retry after a timeout does not
 create a second post" property rests on. Nothing in this entity
 regenerates it; a retry re-reads the same row and reuses the same key.
 
-Five statuses, not `generation_item`'s five for the same reason (`pending
--> running -> succeeded` / `failed -> dead`) but a different vocabulary:
-this entity collapses "failed, will retry" back into `PENDING` rather than
-giving it its own transient `FAILED` state, because `attempts`/`last_error`
-already carry the per-attempt history a merchant-facing publish record
-needs — a distinct state here would describe nothing `attempts`/
-`last_error` don't already say plainer. `FAILED` is reserved for the one
-case that *is* worth a distinct terminal state: attempts exhausted
-(`TaskQueue.fail` reporting the job went `dead`), where nothing will ever
-retry this row again and a human needs to know that.
+Six statuses, matching `docs/DIAGRAMS.md`'s own Publication state diagram
+exactly (`scheduled -> dispatching -> published`, `dispatching ->
+failed -> dispatching`, `failed -> dead`, `scheduled -> cancelled`) —
+**not** the five-value collapsed vocabulary the previous two migrations
+shipped from D21's prose sketch alone, before this entity's own diagram
+was checked. That earlier design deliberately collapsed "failed, will
+retry" back into a single waiting state; the diagram disagrees and gives
+`failed` its own transient state, matching `generation_item`'s shape
+instead. Reworked in one migration (`e563d43d40b4`) rather than left to
+drift, per user decision after the mismatch was found.
 
-``SCHEDULED`` (added by `6e9ce80dab43_widen_publications_status`, see that
-migration) is D21's "a `due_at` column plus a poller" — a `Publication`
-created with a future `scheduled_at` starts here instead of `PENDING` and
-writes no `publish_requested` outbox event yet; nothing is claimable by
-`StartPublicationPublish` until `release_for_publishing()` moves it to
-`PENDING` and the poller (`features.publishing.
-release_scheduled_publications`) writes that event itself, in the same
-transaction as the transition. Treated as "live" for the single-flight
-guard exactly like `PENDING`/`PUBLISHING` — a second publish to the same
-channel and variant must not slip in while the first is merely waiting for
-its scheduled time.
+``create()`` always starts a row `SCHEDULED` — there is no separate
+"publish now" status. `due_at` defaults to `now` when the caller gives
+none, so an immediate publish is simply a `due_at` that is already due;
+the `due_at` poller (`features.publishing.
+release_scheduled_publications`) is the *only* thing that ever makes a
+`SCHEDULED` row claimable, whether it was due immediately or scheduled
+for later — matching D21's own warning that a task queue does not
+schedule reliably across restarts and redeploys, so nothing here ever
+hands `TaskQueue.enqueue()` a future `run_at` directly. Treated as "live"
+for the single-flight guard, same as `DISPATCHING` and `FAILED` (still
+in flight, still trying) — `PUBLISHED`/`DEAD`/`CANCELLED` are all
+terminal and are not.
 
-``mark_publishing()`` accepts both `PENDING` (first attempt) and its own
-prior `PENDING` after a reverted failed attempt (the retry self-loop) —
-the same "claim, attempt, revert-or-advance" shape `GenerationItem.
-mark_running` already established for `pending -> running` / `failed ->
-running`.
+``mark_dispatching()`` accepts both `SCHEDULED` (the poller found it due)
+and `FAILED` (a retry, driven by `TaskQueue`'s own backoff-rescheduled
+job — **not** by the `due_at` poller; a retry never goes back through
+`scheduled`) — the same "claim, attempt, revert-or-advance" shape
+`GenerationItem.mark_running` already established for `pending -> running`
+/ `failed -> running`.
+
+``record_attempt_failure(terminal=False)`` moves to `FAILED`, a distinct
+transient state (not a revert to `SCHEDULED`) — `attempts`/`last_error`
+already carry the per-attempt history, but the *state itself* now names
+"has failed, will retry" rather than folding it back into "not yet
+tried," matching the diagram.
+
+``defer()`` (rate-limited, not failed — see this module's own docstring
+on that split before) moves `DISPATCHING -> SCHEDULED` and pushes `due_at`
+forward to the deferred time, rather than directly re-enqueueing a
+`TaskQueue` job the way the pre-rework version did — that was exactly the
+"schedule via a future `run_at`" anti-pattern D21 warns against, just for
+the defer case instead of the first attempt. The `due_at` poller picks the
+row back up once its new `due_at` is reached, the same as any other
+`SCHEDULED` row; see `features.publishing.defer_publication_publish`'s
+own docstring for the accepted "no terminal state for a permanently
+unsatisfiable limit" tradeoff, which still applies unchanged.
+
+``cancel()`` is `SCHEDULED -> CANCELLED` only, per the diagram
+(`scheduled --> cancelled`) — a publication already `DISPATCHING` or
+later cannot be cancelled, since a provider call may already be in
+flight or done.
 """
 
 from __future__ import annotations
@@ -60,10 +84,11 @@ from app.shared.ids import (
 
 class PublicationStatus(StrEnum):
     SCHEDULED = "scheduled"
-    PENDING = "pending"
-    PUBLISHING = "publishing"
+    DISPATCHING = "dispatching"
     PUBLISHED = "published"
     FAILED = "failed"
+    DEAD = "dead"
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -75,7 +100,7 @@ class Publication:
     content_draft_id: ContentDraftId | None
     idempotency_key: str
     status: PublicationStatus
-    scheduled_at: datetime | None
+    due_at: datetime
     published_at: datetime | None
     external_post_id: str | None
     permalink: str | None
@@ -93,14 +118,9 @@ class Publication:
         *,
         content_draft_id: ContentDraftId | None,
         payload: dict[str, Any],
-        scheduled_at: datetime | None = None,
+        due_at: datetime | None = None,
         now: datetime,
     ) -> Publication:
-        status = (
-            PublicationStatus.SCHEDULED
-            if scheduled_at is not None and scheduled_at > now
-            else PublicationStatus.PENDING
-        )
         return Publication(
             id=new_publication_id(),
             tenant_id=tenant_id,
@@ -108,8 +128,8 @@ class Publication:
             channel_id=channel_id,
             content_draft_id=content_draft_id,
             idempotency_key=uuid4().hex,
-            status=status,
-            scheduled_at=scheduled_at,
+            status=PublicationStatus.SCHEDULED,
+            due_at=due_at if due_at is not None else now,
             published_at=None,
             external_post_id=None,
             permalink=None,
@@ -120,27 +140,29 @@ class Publication:
             updated_at=now,
         )
 
-    def release_for_publishing(self, *, now: datetime) -> None:
-        """`SCHEDULED -> PENDING`, called by the poller once `scheduled_at`
-        is due. Distinct from `mark_publishing()`: this makes the row
-        claimable, it does not itself claim it — `StartPublicationPublish`
-        still does that, same as for a publication that was never
-        scheduled at all."""
+    def defer_dispatch(self, *, until: datetime, now: datetime) -> None:
+        """Pushes `due_at` forward without changing `status` — used by
+        `features.publishing.release_scheduled_publications` as the guard
+        against a second sweep re-enqueueing the same still-`SCHEDULED`
+        row before the first job it created has been claimed. Not a state
+        transition; `status` stays `SCHEDULED` throughout, which is why
+        this is a distinct method from `defer()` (rate-limited mid-attempt,
+        `DISPATCHING -> SCHEDULED`) rather than a shared one."""
         if self.status != PublicationStatus.SCHEDULED:
-            raise ValidationError(f"Cannot release from status {self.status.value!r}.")
-        self.status = PublicationStatus.PENDING
+            raise ValidationError(f"Cannot defer dispatch from status {self.status.value!r}.")
+        self.due_at = until
         self.updated_at = now
 
-    def mark_publishing(self, *, now: datetime) -> None:
-        if self.status != PublicationStatus.PENDING:
-            raise ValidationError(f"Cannot start publishing from status {self.status.value!r}.")
-        self.status = PublicationStatus.PUBLISHING
+    def mark_dispatching(self, *, now: datetime) -> None:
+        if self.status not in (PublicationStatus.SCHEDULED, PublicationStatus.FAILED):
+            raise ValidationError(f"Cannot start dispatching from status {self.status.value!r}.")
+        self.status = PublicationStatus.DISPATCHING
         self.updated_at = now
 
     def mark_published(
         self, *, external_post_id: str, permalink: str | None, now: datetime
     ) -> None:
-        if self.status != PublicationStatus.PUBLISHING:
+        if self.status != PublicationStatus.DISPATCHING:
             raise ValidationError(f"Cannot publish from status {self.status.value!r}.")
         self.status = PublicationStatus.PUBLISHED
         self.external_post_id = external_post_id
@@ -150,27 +172,33 @@ class Publication:
 
     def record_attempt_failure(self, *, error: str, terminal: bool, now: datetime) -> None:
         """Called once per failed attempt, whether or not `TaskQueue` will
-        retry it. `terminal=True` (the job came back `dead`) is the only
-        case that also moves `status` — otherwise this reverts to
-        `PENDING` so the next attempt can call `mark_publishing()` again,
-        the retry self-loop described in this module's own docstring."""
-        if self.status != PublicationStatus.PUBLISHING:
+        retry it. `terminal=True` (the job came back `dead`) moves to the
+        terminal `DEAD` state; otherwise `FAILED`, the transient
+        retry-pending state this module's own docstring explains."""
+        if self.status != PublicationStatus.DISPATCHING:
             raise ValidationError(f"Cannot fail from status {self.status.value!r}.")
         self.attempts += 1
         self.last_error = error
-        self.status = PublicationStatus.FAILED if terminal else PublicationStatus.PENDING
+        self.status = PublicationStatus.DEAD if terminal else PublicationStatus.FAILED
         self.updated_at = now
 
-    def defer(self, *, reason: str, now: datetime) -> None:
-        """A rate-limited attempt, not a failed one: reverts to `PENDING`
-        for a later retry the same way `record_attempt_failure` does, but
+    def defer(self, *, reason: str, due_at: datetime, now: datetime) -> None:
+        """A rate-limited attempt, not a failed one: reverts to
+        `SCHEDULED` with `due_at` pushed to the deferred time, but
         deliberately does **not** increment `attempts` — see
         `features.publishing.defer_publication_publish`'s docstring for
         why consuming a bounded retry on every rate-limit rejection would
         let a channel at its daily cap lose every queued publish for the
         rest of the day, permanently."""
-        if self.status != PublicationStatus.PUBLISHING:
+        if self.status != PublicationStatus.DISPATCHING:
             raise ValidationError(f"Cannot defer from status {self.status.value!r}.")
         self.last_error = reason
-        self.status = PublicationStatus.PENDING
+        self.status = PublicationStatus.SCHEDULED
+        self.due_at = due_at
+        self.updated_at = now
+
+    def cancel(self, *, now: datetime) -> None:
+        if self.status != PublicationStatus.SCHEDULED:
+            raise ValidationError(f"Cannot cancel from status {self.status.value!r}.")
+        self.status = PublicationStatus.CANCELLED
         self.updated_at = now

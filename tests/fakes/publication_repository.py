@@ -7,8 +7,8 @@ from app.shared.ids import ProductVariantId, PublicationId, SocialAccountId, Ten
 
 _LIVE_STATUSES = (
     PublicationStatus.SCHEDULED,
-    PublicationStatus.PENDING,
-    PublicationStatus.PUBLISHING,
+    PublicationStatus.DISPATCHING,
+    PublicationStatus.FAILED,
 )
 
 
@@ -40,10 +40,9 @@ class InMemoryPublicationRepository:
             for (tid, _), row in self._rows.items()
             if tid == tenant_id
             and row.status is PublicationStatus.SCHEDULED
-            and row.scheduled_at is not None
-            and row.scheduled_at <= before
+            and row.due_at <= before
         ]
-        matches.sort(key=lambda row: row.scheduled_at or before)
+        matches.sort(key=lambda row: row.due_at)
         return matches[:limit]
 
     async def add(self, publication: Publication) -> None:

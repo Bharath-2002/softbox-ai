@@ -108,13 +108,17 @@ async def test_create_publication_over_http_returns_202() -> None:
 
     assert response.status_code == 202
     body = response.json()
-    assert body["status"] == "pending"
-    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
-    assert len(events) == 1
-    assert events[0].event_type == "publication.publish_requested"
+    # Every publication starts `scheduled` now, whether or not a `due_at`
+    # was given - the `due_at` poller is the only thing that ever enqueues
+    # a job, so nothing is claimable yet even for an immediate request.
+    assert body["status"] == "scheduled"
+    job = await uow_factory.task_queue.claim(
+        tenant_id, claimed_by="test", job_type=JOB_TYPE, now=_NOW
+    )
+    assert job is None
 
 
-async def test_a_scheduled_publication_over_http_writes_no_outbox_event_yet() -> None:
+async def test_a_scheduled_publication_over_http_uses_the_given_due_at() -> None:
     app, uow_factory, _clock, codec, _channel_publisher = _build()
     tenant_id_str = str(uuid.uuid4())
     tenant_id = TenantId(uuid.UUID(tenant_id_str))
@@ -128,7 +132,7 @@ async def test_a_scheduled_publication_over_http_writes_no_outbox_event_yet() ->
                 "channel_id": str(channel.id),
                 "caption": "Crafted with care.",
                 "media_asset_ids": [str(new_asset_id())],
-                "scheduled_at": (_NOW + timedelta(days=1)).isoformat(),
+                "due_at": (_NOW + timedelta(days=1)).isoformat(),
             },
             headers=headers,
         )
@@ -136,8 +140,7 @@ async def test_a_scheduled_publication_over_http_writes_no_outbox_event_yet() ->
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "scheduled"
-    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
-    assert events == []
+    assert datetime.fromisoformat(body["due_at"]) == _NOW + timedelta(days=1)
 
 
 async def test_release_scheduled_publications_over_http_releases_a_due_row() -> None:
@@ -151,7 +154,7 @@ async def test_release_scheduled_publications_over_http_releases_a_due_row() -> 
         channel.id,
         content_draft_id=None,
         payload={"caption": "x", "media_asset_ids": [], "link": None},
-        scheduled_at=_NOW + timedelta(hours=1),
+        due_at=_NOW + timedelta(hours=1),
         now=_NOW,
     )
     await uow_factory.publications.add(publication)
@@ -163,8 +166,64 @@ async def test_release_scheduled_publications_over_http_releases_a_due_row() -> 
 
     assert response.status_code == 200
     assert response.json() == {"released": 1}
-    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
-    assert len(events) == 1
+    job = await uow_factory.task_queue.claim(
+        tenant_id, claimed_by="test", job_type=JOB_TYPE, now=clock.now()
+    )
+    assert job is not None
+    assert job.payload == {"publication_id": str(publication.id)}
+
+
+async def test_cancel_publication_over_http_moves_a_scheduled_row_to_cancelled() -> None:
+    app, uow_factory, _clock, codec, _channel_publisher = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    variant, channel = await _seed_variant_and_channel(uow_factory, tenant_id)
+    publication = Publication.create(
+        tenant_id,
+        variant.id,
+        channel.id,
+        content_draft_id=None,
+        payload={"caption": "x", "media_asset_ids": [], "link": None},
+        due_at=_NOW + timedelta(days=1),
+        now=_NOW,
+    )
+    await uow_factory.publications.add(publication)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="admin", capabilities=["product.manage"])
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/publications/{publication.id}/cancel", headers=headers
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    stored = await uow_factory.publications.get(tenant_id, publication.id)
+    assert stored is not None
+    assert stored.status.value == "cancelled"
+
+
+async def test_cancel_publication_requires_the_product_manage_capability() -> None:
+    app, uow_factory, _clock, codec, _channel_publisher = _build()
+    tenant_id_str = str(uuid.uuid4())
+    tenant_id = TenantId(uuid.UUID(tenant_id_str))
+    variant, channel = await _seed_variant_and_channel(uow_factory, tenant_id)
+    publication = Publication.create(
+        tenant_id,
+        variant.id,
+        channel.id,
+        content_draft_id=None,
+        payload={"caption": "x", "media_asset_ids": [], "link": None},
+        now=_NOW,
+    )
+    await uow_factory.publications.add(publication)
+    headers = _bearer(codec, tenant_id=tenant_id_str, role="viewer", capabilities=[])
+
+    async with await _client(app) as http:
+        response = await http.post(
+            f"/api/v1/admin/publications/{publication.id}/cancel", headers=headers
+        )
+
+    assert response.status_code == 403
 
 
 async def test_create_publication_requires_the_product_manage_capability() -> None:

@@ -206,7 +206,7 @@ async def test_add_then_get_round_trips(ctx: Context) -> None:
 
     fetched = await ctx.publications.get(ctx.tenant_id, publication.id)
     assert fetched is not None
-    assert fetched.status is PublicationStatus.PENDING
+    assert fetched.status is PublicationStatus.SCHEDULED
     assert fetched.idempotency_key == publication.idempotency_key
     assert fetched.payload == {
         "caption": "Crafted with care.",
@@ -215,8 +215,32 @@ async def test_add_then_get_round_trips(ctx: Context) -> None:
     }
 
 
-async def test_get_live_finds_a_pending_publication(ctx: Context) -> None:
+async def test_get_live_finds_a_scheduled_publication(ctx: Context) -> None:
     publication = _publication(ctx)
+    await ctx.publications.add(publication)
+
+    live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
+
+    assert live is not None
+    assert live.id == publication.id
+    assert live.status is PublicationStatus.SCHEDULED
+
+
+async def test_get_live_finds_a_dispatching_publication(ctx: Context) -> None:
+    publication = _publication(ctx)
+    publication.mark_dispatching(now=utcnow())
+    await ctx.publications.add(publication)
+
+    live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
+
+    assert live is not None
+    assert live.id == publication.id
+
+
+async def test_get_live_finds_a_failed_publication(ctx: Context) -> None:
+    publication = _publication(ctx)
+    publication.mark_dispatching(now=utcnow())
+    publication.record_attempt_failure(error="timeout", terminal=False, now=utcnow())
     await ctx.publications.add(publication)
 
     live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
@@ -233,33 +257,13 @@ async def test_get_live_returns_none_when_nothing_is_in_flight(ctx: Context) -> 
 
 async def test_get_live_ignores_a_terminal_publication(ctx: Context) -> None:
     publication = _publication(ctx)
-    publication.mark_publishing(now=utcnow())
+    publication.mark_dispatching(now=utcnow())
     publication.mark_published(external_post_id="post-1", permalink="https://x", now=utcnow())
     await ctx.publications.add(publication)
 
     live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
 
     assert live is None
-
-
-async def test_get_live_finds_a_scheduled_publication(ctx: Context) -> None:
-    now = utcnow()
-    publication = Publication.create(
-        ctx.tenant_id,
-        ctx.variant_id,
-        ctx.channel_id,
-        content_draft_id=None,
-        payload={"caption": "x", "media_asset_ids": [], "link": None},
-        scheduled_at=now + timedelta(days=1),
-        now=now,
-    )
-    await ctx.publications.add(publication)
-
-    live = await ctx.publications.get_live(ctx.tenant_id, ctx.variant_id, ctx.channel_id)
-
-    assert live is not None
-    assert live.id == publication.id
-    assert live.status is PublicationStatus.SCHEDULED
 
 
 async def test_list_due_for_release_finds_a_due_scheduled_publication(ctx: Context) -> None:
@@ -270,7 +274,7 @@ async def test_list_due_for_release_finds_a_due_scheduled_publication(ctx: Conte
         ctx.channel_id,
         content_draft_id=None,
         payload={"caption": "x", "media_asset_ids": [], "link": None},
-        scheduled_at=now - timedelta(minutes=1),
+        due_at=now - timedelta(minutes=1),
         now=now - timedelta(days=1),
     )
     await ctx.publications.add(publication)
@@ -288,7 +292,7 @@ async def test_list_due_for_release_ignores_a_not_yet_due_publication(ctx: Conte
         ctx.channel_id,
         content_draft_id=None,
         payload={"caption": "x", "media_asset_ids": [], "link": None},
-        scheduled_at=now + timedelta(days=1),
+        due_at=now + timedelta(days=1),
         now=now,
     )
     await ctx.publications.add(publication)
@@ -301,7 +305,7 @@ async def test_list_due_for_release_ignores_a_not_yet_due_publication(ctx: Conte
 async def test_update_persists_a_status_transition(ctx: Context) -> None:
     publication = _publication(ctx)
     await ctx.publications.add(publication)
-    publication.mark_publishing(now=utcnow())
+    publication.mark_dispatching(now=utcnow())
     publication.mark_published(external_post_id="post-1", permalink="https://x", now=utcnow())
 
     await ctx.publications.update(publication)

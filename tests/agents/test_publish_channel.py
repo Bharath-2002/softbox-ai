@@ -18,6 +18,11 @@ docstring), and **no adapter exists in this repo to prove it against**.
 short-circuit fired, which is necessary scaffolding for these tests to run
 at all, not evidence about a real Pinterest/Instagram/Facebook adapter's
 behaviour. That evidence can only exist once a real adapter does.
+
+`_seed()` enqueues a `task_queue` job directly, bypassing
+`ReleaseScheduledPublicationsForTenant` (the `due_at` poller) — these
+tests exercise the agent in isolation, starting from "there is already a
+claimable job," which is all `StartPublicationPublish` ever needs to know.
 """
 
 from __future__ import annotations
@@ -30,6 +35,9 @@ from app.entities.publication import Publication, PublicationStatus
 from app.features.publishing.complete_publication_publish import CompletePublicationPublish
 from app.features.publishing.defer_publication_publish import DeferPublicationPublish
 from app.features.publishing.fail_publication_publish import FailPublicationPublish
+from app.features.publishing.release_scheduled_publications import (
+    ReleaseScheduledPublicationsForTenant,
+)
 from app.features.publishing.start_publication_publish import (
     JOB_TYPE,
     StartPublicationPublish,
@@ -108,13 +116,15 @@ async def test_a_lost_response_after_the_provider_accepted_does_not_create_a_sec
     first = await agent.run(tenant_id=tenant_id)
 
     assert first is not None
-    assert first.status is PublicationStatus.PENDING  # reverted for retry, not dead
+    assert first.status is PublicationStatus.FAILED  # retry-pending, not dead
     assert first.attempts == 1
     assert len(channel_publisher.calls) == 1
 
     # Second run (the retry): advance past the backoff window `fail()` set
     # on the rescheduled job, then reuse the same idempotency_key - the fake
     # already has this post recorded and returns it without a new call.
+    # The retry goes failed -> dispatching directly (TaskQueue's own
+    # backoff-rescheduled job), never back through scheduled.
     clock.advance(timedelta(seconds=5))
     second = await agent.run(tenant_id=tenant_id)
 
@@ -137,7 +147,7 @@ async def test_a_lost_response_after_the_provider_accepted_does_not_create_a_sec
 async def test_the_idempotency_key_is_committed_before_any_provider_call() -> None:
     """Proves the property structurally: `CreatePublication` (not exercised
     directly here - `_seed` mirrors its write) commits the row and its key
-    in one transaction with no `ChannelPublisher` involved at all. If the
+    in one transaction with no `ChannelPublisher` involvement at all. If the
     process died right after that commit and never ran the agent, nothing
     would have been posted and the key would already be durable - which is
     exactly what this asserts without needing to literally kill a process."""
@@ -146,7 +156,7 @@ async def test_the_idempotency_key_is_committed_before_any_provider_call() -> No
     _tenant_id, publication = await _seed(uow_factory)
 
     assert publication.idempotency_key
-    assert publication.status is PublicationStatus.PENDING
+    assert publication.status is PublicationStatus.SCHEDULED
     assert channel_publisher.calls == []
 
 
@@ -173,7 +183,7 @@ async def test_a_rejected_validation_fails_the_attempt_without_calling_publish()
     result = await agent.run(tenant_id=tenant_id)
 
     assert result is not None
-    assert result.status is PublicationStatus.PENDING
+    assert result.status is PublicationStatus.FAILED
     assert result.attempts == 1
     assert result.last_error is not None
     assert "caption too long" in result.last_error
@@ -190,7 +200,7 @@ async def test_an_exhausted_rate_limit_defers_without_consuming_a_retry_attempt(
     result = await agent.run(tenant_id=tenant_id)
 
     assert result is not None
-    assert result.status is PublicationStatus.PENDING
+    assert result.status is PublicationStatus.SCHEDULED
     assert result.attempts == 0  # deferred, not failed - see entities.publication.Publication.defer
     assert result.last_error is not None
     assert "rate limit" in result.last_error.lower()
@@ -204,26 +214,63 @@ async def test_a_rate_limited_publication_survives_repeated_polls_without_going_
     while a daily rate window still had hours left, permanently failing
     the publication. Runs the agent 6 times against a permanently
     exhausted limit (well past the 5-attempt ladder `fail()` would have
-    hit) and proves the row is still alive and untouched by `attempts`."""
+    hit) and proves the row is still alive and untouched by `attempts`.
+
+    `defer()` no longer re-enqueues a job directly (that was the
+    pre-rework version's own "schedule via a future `run_at`" mistake, the
+    same anti-pattern D21 warns about) - the `due_at` poller does, so each
+    poll here is `release_scheduled_publications()` followed by
+    `agent.run()`, mirroring how these two routes would actually be
+    triggered in sequence."""
     uow_factory = FakeUnitOfWorkFactory()
     tenant_id, publication = await _seed(uow_factory)
     channel_publisher = FakeChannelPublisher()
     clock = FakeClock(_NOW)
     agent = _agent(uow_factory, channel_publisher, clock, rate_limit=0)
+    release = ReleaseScheduledPublicationsForTenant(uow_factory, clock)
 
     for _ in range(6):
         result = await agent.run(tenant_id=tenant_id)
         assert result is not None
-        assert result.status is PublicationStatus.PENDING
+        assert result.status is PublicationStatus.SCHEDULED
         # Exactly one window, no more: `_NOW` is midnight UTC and the
         # window is epoch-anchored, so this always lands precisely on the
         # next window boundary `defer()` scheduled the retry for. A `_NOW`
         # not aligned to midnight would need a smaller, explicit advance.
         clock.advance(timedelta(days=1))
+        await release(tenant_id)
 
     stored = await uow_factory.publications.get(tenant_id, publication.id)
     assert stored is not None
-    assert stored.status is PublicationStatus.PENDING  # never FAILED
+    assert stored.status is PublicationStatus.SCHEDULED  # never dead
+    assert stored.attempts == 0
+    assert channel_publisher.calls == []
+
+
+async def test_the_poller_does_not_release_a_deferred_row_before_its_rate_window_ends() -> None:
+    """A sweep that runs partway through the deferred window (worker was
+    slow, or the sweep just happens to run early) must not treat the row
+    as due - `defer()` sets `due_at` to the exact window boundary, and
+    `list_due_for_release` must honour it precisely rather than the row
+    getting released, rejected again, and burning a pointless cycle."""
+    uow_factory = FakeUnitOfWorkFactory()
+    tenant_id, publication = await _seed(uow_factory)
+    channel_publisher = FakeChannelPublisher()
+    clock = FakeClock(_NOW)
+    agent = _agent(uow_factory, channel_publisher, clock, rate_limit=0)
+    release = ReleaseScheduledPublicationsForTenant(uow_factory, clock)
+
+    first = await agent.run(tenant_id=tenant_id)
+    assert first is not None
+    assert first.status is PublicationStatus.SCHEDULED
+
+    clock.advance(timedelta(hours=1))  # well short of the 1-day window
+    released = await release(tenant_id)
+
+    assert released == 0
+    stored = await uow_factory.publications.get(tenant_id, publication.id)
+    assert stored is not None
+    assert stored.status is PublicationStatus.SCHEDULED
     assert stored.attempts == 0
     assert channel_publisher.calls == []
 

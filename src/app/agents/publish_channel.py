@@ -29,8 +29,8 @@ should count. A rate-limit rejection is different: the daily window resets
 on a schedule `TaskQueue.fail()`'s backoff (capped at 300s) has no
 relationship to, so counting it as an attempt would let a channel at its
 cap for the first hour of the day exhaust all five retries within about
-fifteen minutes and go `dead`/`FAILED` — losing every publish queued for
-the rest of a window that had hours left to run. See
+fifteen minutes and go `dead` — losing every publish queued for the rest
+of a window that had hours left to run. See
 `DeferPublicationPublish`'s own docstring for the full reasoning and
 `entities.publication.Publication.defer`'s docstring for why it does not
 increment `attempts`.
@@ -101,7 +101,7 @@ class PublishChannelAgent:
                 publication_id=ctx.publication_id,
                 job_id=ctx.job_id,
                 reason="Per-account publish rate limit exceeded for the day.",
-                run_at=window_end,
+                due_at=window_end,
             )
 
         payload = PublishPayload(

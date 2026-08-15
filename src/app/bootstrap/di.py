@@ -76,6 +76,7 @@ from app.features.products.fan_out_generation_items import FanOutGenerationItems
 from app.features.products.list_products import ListProducts
 from app.features.products.recompute_product_readiness import RecomputeProductReadiness
 from app.features.products.start_input_image_validation import StartInputImageValidation
+from app.features.publishing.cancel_publication import CancelPublication
 from app.features.publishing.complete_publication_publish import CompletePublicationPublish
 from app.features.publishing.create_publication import CreatePublication
 from app.features.publishing.defer_publication_publish import DeferPublicationPublish
@@ -617,6 +618,10 @@ def get_release_scheduled_publications_for_tenant(
     return ReleaseScheduledPublicationsForTenant(uow_factory, clock)
 
 
+def get_cancel_publication(uow_factory: UowFactoryDep, clock: ClockDep) -> CancelPublication:
+    return CancelPublication(uow_factory, clock)
+
+
 def get_publish_channel_agent(
     request: Request,
     start: Annotated[StartPublicationPublish, Depends(get_start_publication_publish)],
@@ -775,6 +780,7 @@ ReleaseScheduledPublicationsForTenantDep = Annotated[
     ReleaseScheduledPublicationsForTenant,
     Depends(get_release_scheduled_publications_for_tenant),
 ]
+CancelPublicationDep = Annotated[CancelPublication, Depends(get_cancel_publication)]
 ApproveContentDraftDep = Annotated[ApproveContentDraft, Depends(get_approve_content_draft)]
 RejectContentDraftDep = Annotated[RejectContentDraft, Depends(get_reject_content_draft)]
 ListContentDraftsForVariantDep = Annotated[

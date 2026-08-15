@@ -1,24 +1,29 @@
 """D21's publish-trigger endpoints, the same "real capability, no automatic
 trigger" shape ``admin_content.py``/``admin_generation.py`` already use.
 
-``POST /variants/{variant_id}/publications`` enqueues a publish attempt for
-one ``(variant, channel)`` — commits the row and its idempotency key,
-writes the outbox event, returns ``202``. Nothing has been posted to any
-provider by the time the response is sent; see
-``features.publishing.create_publication``'s docstring for why that split
-is exactly what makes the Gate's idempotency property provable.
+``POST /variants/{variant_id}/publications`` commits a `SCHEDULED` row and
+its idempotency key, returns ``202``. Nothing has been posted to any
+provider by the time the response is sent, and no job is enqueued yet
+either — see ``features.publishing.create_publication``'s docstring for
+why that split is exactly what makes the Gate's idempotency property
+provable, and why every publication (immediate or genuinely scheduled)
+goes through the same ``due_at``-poller path.
+
+``POST /publications/release-scheduled`` is that poller
+(``features.publishing.release_scheduled_publications``): enqueues a
+publish job for every due ``SCHEDULED`` publication. Returns a count, the
+same "sweep over many rows" shape ``reconcile-requests`` uses in
+``admin_generation.py``.
 
 ``POST /publications/publish-next`` is the worker step: claims whatever
 publish job is oldest-due for the tenant and calls ``ChannelPublisher``
-between two transactions. Gated on ``Capability.PRODUCT_MANAGE``, matching
-every other worker-step trigger route in this codebase — this is
-pipeline execution, not an approval action.
+between two transactions.
 
-``POST /publications/release-scheduled`` is D21's scheduling poller
-(``features.publishing.release_scheduled_publications``): moves every due
-``SCHEDULED`` publication to ``PENDING`` and writes its outbox event.
-Returns a count, the same "sweep over many rows" shape
-``reconcile-requests`` uses in ``admin_generation.py``.
+``POST /publications/{id}/cancel`` is the only other exit from
+``SCHEDULED`` — see ``features.publishing.cancel_publication``.
+
+All gated on ``Capability.PRODUCT_MANAGE``, matching every other
+worker-step/publish-authoring trigger route in this codebase.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from pydantic import BaseModel
 
 from app.api.deps.authorization import PrincipalDep, require_capability
 from app.bootstrap.di import (
+    CancelPublicationDep,
     CreatePublicationDep,
     PublishChannelAgentDep,
     ReleaseScheduledPublicationsForTenantDep,
@@ -48,7 +54,7 @@ class CreatePublicationRequest(BaseModel):
     caption: str
     media_asset_ids: list[AssetId]
     link: str | None = None
-    scheduled_at: datetime | None = None
+    due_at: datetime | None = None
 
 
 class PublicationResponse(BaseModel):
@@ -56,6 +62,7 @@ class PublicationResponse(BaseModel):
     variant_id: ProductVariantId
     channel_id: SocialAccountId
     status: str
+    due_at: datetime
     external_post_id: str | None
     permalink: str | None
     attempts: int
@@ -69,6 +76,7 @@ class PublicationResponse(BaseModel):
             variant_id=p.variant_id,
             channel_id=p.channel_id,
             status=p.status.value,
+            due_at=p.due_at,
             external_post_id=p.external_post_id,
             permalink=p.permalink,
             attempts=p.attempts,
@@ -98,7 +106,7 @@ async def create_publication(
         caption=body.caption,
         media_asset_ids=body.media_asset_ids,
         link=body.link,
-        scheduled_at=body.scheduled_at,
+        due_at=body.due_at,
     )
     return PublicationResponse.from_entity(publication)
 
@@ -131,3 +139,23 @@ async def release_scheduled_publications(
     assert principal.tenant_id is not None
     released = await use_case(principal.tenant_id)
     return ReleaseScheduledResponse(released=released)
+
+
+@router.post(
+    "/publications/{publication_id}/cancel",
+    response_model=PublicationResponse,
+    dependencies=_manage,
+)
+async def cancel_publication(
+    publication_id: PublicationId,
+    principal: PrincipalDep,
+    use_case: CancelPublicationDep,
+) -> PublicationResponse:
+    assert principal.tenant_id is not None
+    assert principal.user_id is not None
+    publication = await use_case(
+        tenant_id=principal.tenant_id,
+        publication_id=publication_id,
+        cancelled_by=principal.user_id,
+    )
+    return PublicationResponse.from_entity(publication)

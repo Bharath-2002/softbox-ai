@@ -650,7 +650,7 @@ publications_table = Table(
     Column("content_draft_id", Uuid(), nullable=True),
     Column("idempotency_key", Text(), nullable=False),
     Column("status", _publication_status_type, nullable=False),
-    Column("scheduled_at", DateTime(timezone=True), nullable=True),
+    Column("due_at", DateTime(timezone=True), nullable=False),
     Column("published_at", DateTime(timezone=True), nullable=True),
     Column("external_post_id", Text(), nullable=True),
     Column("permalink", Text(), nullable=True),

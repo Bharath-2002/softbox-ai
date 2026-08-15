@@ -716,7 +716,7 @@ social_accounts   id, tenant_id, provider, external_account_id, display_name,
                   access_expires_at, refresh_expires_at, status, last_error
 
 publications      id, tenant_id, variant_id, channel_id, content_draft_id,
-                  idempotency_key UNIQUE, status, scheduled_at, published_at,
+                  idempotency_key UNIQUE, status, due_at, published_at,
                   external_post_id, permalink, payload JSONB, attempts, last_error
 ```
 

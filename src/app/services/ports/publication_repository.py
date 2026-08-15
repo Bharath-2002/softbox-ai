@@ -4,18 +4,18 @@ caller from this chunk's first commit (unlike `SocialAccountRepository`,
 which has none yet).
 
 `get_live` backs `CreatePublication`'s single-flight pre-check: a
-publication is "live" while it is `scheduled`, `pending` or `publishing` —
-not yet done, as opposed to `published`/`failed` where a new attempt for
-the same `(channel_id, variant_id)` pair is legitimate. The migration's
-partial unique index enforces the same "live" definition as the backstop
-for the check-then-act race between two concurrent calls.
+publication is "live" while it is `scheduled`, `dispatching` or `failed` —
+still in flight, as opposed to `published`/`dead`/`cancelled` where a new
+attempt for the same `(channel_id, variant_id)` pair is legitimate. The
+migration's partial unique index enforces the same "live" definition as
+the backstop for the check-then-act race between two concurrent calls.
 
-`list_due_for_release` backs the scheduling poller
+`list_due_for_release` backs the `due_at` poller
 (`features.publishing.release_scheduled_publications`): every `scheduled`
-publication whose `scheduled_at` has passed, locked with `SKIP LOCKED` the
-same way `GenerationRequestRepository.list_running_for_update` locks its
-own sweep candidates, so two concurrent sweeps for one tenant partition
-rather than double-release the same row.
+publication whose `due_at` has passed, locked with `SKIP LOCKED` the same
+way `GenerationRequestRepository.list_running_for_update` locks its own
+sweep candidates, so two concurrent sweeps for one tenant partition rather
+than double-release the same row.
 """
 
 from __future__ import annotations

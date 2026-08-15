@@ -13,8 +13,8 @@ from app.shared.ids import ProductVariantId, PublicationId, SocialAccountId, Ten
 
 _LIVE_STATUSES = (
     PublicationStatus.SCHEDULED,
-    PublicationStatus.PENDING,
-    PublicationStatus.PUBLISHING,
+    PublicationStatus.DISPATCHING,
+    PublicationStatus.FAILED,
 )
 
 
@@ -48,9 +48,9 @@ class SqlPublicationRepository:
             .where(
                 publications_table.c.tenant_id == tenant_id,
                 publications_table.c.status == PublicationStatus.SCHEDULED,
-                publications_table.c.scheduled_at <= before,
+                publications_table.c.due_at <= before,
             )
-            .order_by(publications_table.c.scheduled_at)
+            .order_by(publications_table.c.due_at)
             .limit(limit)
             .with_for_update(skip_locked=True)
         )

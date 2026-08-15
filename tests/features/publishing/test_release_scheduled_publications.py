@@ -8,6 +8,7 @@ from app.entities.social_account import SocialAccount
 from app.features.publishing.release_scheduled_publications import (
     ReleaseScheduledPublicationsForTenant,
 )
+from app.features.publishing.start_publication_publish import JOB_TYPE
 from app.shared.ids import new_product_id, new_tenant_id, new_user_id
 from tests.fakes.clock import FakeClock
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
@@ -22,7 +23,7 @@ def _use_case(
 
 
 async def _seed_scheduled_publication(
-    uow_factory: FakeUnitOfWorkFactory, *, scheduled_at: datetime
+    uow_factory: FakeUnitOfWorkFactory, *, due_at: datetime
 ) -> tuple[object, Publication]:
     tenant_id = new_tenant_id()
     variant = ProductVariant.create(
@@ -39,7 +40,7 @@ async def _seed_scheduled_publication(
         channel.id,
         content_draft_id=None,
         payload={"caption": "x", "media_asset_ids": [], "link": None},
-        scheduled_at=scheduled_at,
+        due_at=due_at,
         now=_NOW,
     )
     await uow_factory.publications.add(publication)
@@ -49,7 +50,7 @@ async def _seed_scheduled_publication(
 async def test_a_due_scheduled_publication_is_released_and_enqueued() -> None:
     uow_factory = FakeUnitOfWorkFactory()
     tenant_id, publication = await _seed_scheduled_publication(
-        uow_factory, scheduled_at=_NOW + timedelta(hours=1)
+        uow_factory, due_at=_NOW + timedelta(hours=1)
     )
     clock = FakeClock(_NOW + timedelta(hours=1))
     use_case = _use_case(uow_factory, clock)
@@ -59,17 +60,22 @@ async def test_a_due_scheduled_publication_is_released_and_enqueued() -> None:
     assert released == 1
     stored = await uow_factory.publications.get(tenant_id, publication.id)
     assert stored is not None
-    assert stored.status is PublicationStatus.PENDING
-    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
-    assert len(events) == 1
-    assert events[0].event_type == "publication.publish_requested"
-    assert events[0].payload == {"publication_id": str(publication.id)}
+    # status is unchanged - the poller only pushes `due_at` forward as a
+    # duplicate-enqueue guard; `StartPublicationPublish` is what actually
+    # transitions the row to `dispatching` once the job is claimed
+    assert stored.status is PublicationStatus.SCHEDULED
+    assert stored.due_at > clock.now()
+    job = await uow_factory.task_queue.claim(
+        tenant_id, claimed_by="test", job_type=JOB_TYPE, now=clock.now()
+    )
+    assert job is not None
+    assert job.payload == {"publication_id": str(publication.id)}
 
 
 async def test_a_not_yet_due_scheduled_publication_is_left_alone() -> None:
     uow_factory = FakeUnitOfWorkFactory()
     tenant_id, publication = await _seed_scheduled_publication(
-        uow_factory, scheduled_at=_NOW + timedelta(days=1)
+        uow_factory, due_at=_NOW + timedelta(days=1)
     )
     use_case = _use_case(uow_factory, FakeClock(_NOW))
 
@@ -79,8 +85,29 @@ async def test_a_not_yet_due_scheduled_publication_is_left_alone() -> None:
     stored = await uow_factory.publications.get(tenant_id, publication.id)
     assert stored is not None
     assert stored.status is PublicationStatus.SCHEDULED
-    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
-    assert events == []
+    assert stored.due_at == _NOW + timedelta(days=1)  # untouched
+    job = await uow_factory.task_queue.claim(
+        tenant_id, claimed_by="test", job_type=JOB_TYPE, now=_NOW
+    )
+    assert job is None
+
+
+async def test_two_sweeps_do_not_double_enqueue_the_same_row() -> None:
+    """The `_DISPATCH_GRACE` push is what makes this safe without a
+    status transition: a second sweep immediately after the first must
+    not see the row as due again."""
+    uow_factory = FakeUnitOfWorkFactory()
+    tenant_id, _publication = await _seed_scheduled_publication(
+        uow_factory, due_at=_NOW + timedelta(hours=1)
+    )
+    clock = FakeClock(_NOW + timedelta(hours=1))
+    use_case = _use_case(uow_factory, clock)
+
+    first_pass = await use_case(tenant_id)
+    second_pass = await use_case(tenant_id)
+
+    assert first_pass == 1
+    assert second_pass == 0
 
 
 async def test_returns_zero_when_nothing_is_due() -> None:

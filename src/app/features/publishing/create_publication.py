@@ -1,11 +1,20 @@
 """Commits a `publications` row and its `idempotency_key` **in the same
-transaction**, then writes a `publication.publish_requested` outbox event —
-the same "real capability, no automatic trigger" posture every other queue
-entry point in this codebase uses. This is the transaction the Gate's "the
-idempotency key is committed before the external call" property depends
-on: nothing in this use case ever calls `ChannelPublisher`, so the key is
-durably committed and this call has already returned long before any
-provider is contacted, by construction, not by a runtime check.
+transaction** — this is the transaction the Gate's "the idempotency key is
+committed before the external call" property depends on: nothing in this
+use case ever calls `ChannelPublisher`, so the key is durably committed
+and this call has already returned long before any provider is contacted,
+by construction, not by a runtime check.
+
+Every publication starts `SCHEDULED` (see `entities.publication`'s
+docstring) and this use case writes **no** `publish_requested` outbox
+event, unlike the version that shipped before `docs/DIAGRAMS.md`'s own
+Publication diagram was checked — that version enqueued immediately for a
+`due_at` that was already due, which is exactly the "hand a task queue a
+schedule to keep" shape D21 warns against. The `due_at` poller
+(`features.publishing.release_scheduled_publications`) is now the *only*
+thing that ever makes a row claimable, whether its `due_at` was "now" (an
+immediate publish request) or genuinely in the future — one mechanism,
+not two.
 
 `content_draft_id` is optional (see the migration's docstring for why) but
 when given must resolve to a **live, approved** draft — publishing
@@ -25,18 +34,9 @@ backed by the migration's partial unique index
 (`ix_publications_live_per_channel_variant`) for the check-then-act race
 between two concurrent calls — the same "app-level check, DB-level
 backstop" split D15's `uq_category_spec_versions_tenant_category_version`
-established. A publication is "live" while `scheduled`, `pending` or
-`publishing`; a second publish to the same channel for the same variant is
-fine once the first has reached `published` or `failed`.
-
-A future `scheduled_at` makes `Publication.create` start the row in
-`SCHEDULED` rather than `PENDING` (see that entity's docstring) — this use
-case writes no `publish_requested` outbox event in that case, since
-nothing should be claimable yet. `features.publishing.
-release_scheduled_publications` writes that event itself, once due, in the
-same transaction as the `SCHEDULED -> PENDING` transition. A `scheduled_at`
-that is `None` or already due behaves exactly as before: `PENDING` and
-enqueued immediately.
+established. A publication is "live" while `scheduled`, `dispatching` or
+`failed`; a second publish to the same channel for the same variant is
+fine once the first has reached `published`, `dead` or `cancelled`.
 """
 
 from __future__ import annotations
@@ -44,13 +44,11 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.entities.content_draft import ContentDraftStatus
-from app.entities.publication import Publication, PublicationStatus
+from app.entities.publication import Publication
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.shared.clock import Clock
 from app.shared.errors import ConflictError, NotFoundError, ValidationError
 from app.shared.ids import AssetId, ContentDraftId, ProductVariantId, SocialAccountId, TenantId
-
-_EVENT_TYPE = "publication.publish_requested"
 
 
 class CreatePublication:
@@ -68,7 +66,7 @@ class CreatePublication:
         caption: str,
         media_asset_ids: list[AssetId],
         link: str | None = None,
-        scheduled_at: datetime | None = None,
+        due_at: datetime | None = None,
     ) -> Publication:
         now = self._clock.now()
         async with self._uow_factory(tenant_id) as uow:
@@ -106,17 +104,9 @@ class CreatePublication:
                     "media_asset_ids": [str(a) for a in media_asset_ids],
                     "link": link,
                 },
-                scheduled_at=scheduled_at,
+                due_at=due_at,
                 now=now,
             )
             await uow.publications.add(publication)
-
-            if publication.status is not PublicationStatus.SCHEDULED:
-                await uow.outbox_events.add(
-                    tenant_id,
-                    event_type=_EVENT_TYPE,
-                    payload={"publication_id": str(publication.id)},
-                    now=now,
-                )
 
             return publication

@@ -48,7 +48,10 @@ async def _seed_variant_and_channel(
     return tenant_id, variant.id, channel.id
 
 
-async def test_creating_a_publication_commits_the_row_and_writes_the_outbox_event() -> None:
+async def test_creating_a_publication_commits_the_row_scheduled_with_no_outbox_event() -> None:
+    """Every publication starts `SCHEDULED`, whether or not a `due_at` was
+    given — this use case never writes the trigger event itself; the
+    `due_at` poller does, once due. See `create_publication`'s docstring."""
     use_case, uow_factory = _use_case()
     tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
 
@@ -61,14 +64,13 @@ async def test_creating_a_publication_commits_the_row_and_writes_the_outbox_even
         media_asset_ids=[AssetId(new_asset_id())],
     )
 
-    assert publication.status.value == "pending"
+    assert publication.status is PublicationStatus.SCHEDULED
+    assert publication.due_at == _NOW
     assert publication.idempotency_key
     stored = await uow_factory.publications.get(tenant_id, publication.id)
     assert stored is not None
     events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
-    assert len(events) == 1
-    assert events[0].event_type == "publication.publish_requested"
-    assert events[0].payload == {"publication_id": str(publication.id)}
+    assert events == []
 
 
 async def test_an_unknown_variant_is_not_found() -> None:
@@ -177,7 +179,7 @@ async def test_a_second_publish_succeeds_once_the_first_has_reached_a_terminal_s
         caption="First.",
         media_asset_ids=[AssetId(new_asset_id())],
     )
-    first.mark_publishing(now=_NOW)
+    first.mark_dispatching(now=_NOW)
     first.mark_published(external_post_id="post-1", permalink="https://x", now=_NOW)
     await uow_factory.publications.update(first)
 
@@ -191,12 +193,13 @@ async def test_a_second_publish_succeeds_once_the_first_has_reached_a_terminal_s
     )
 
     assert second.id != first.id
-    assert second.status.value == "pending"
+    assert second.status is PublicationStatus.SCHEDULED
 
 
-async def test_a_future_scheduled_at_creates_a_scheduled_row_with_no_outbox_event() -> None:
+async def test_a_future_due_at_is_kept_and_still_writes_no_outbox_event() -> None:
     use_case, uow_factory = _use_case()
     tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
+    future = _NOW + timedelta(days=1)
 
     publication = await use_case(
         tenant_id=tenant_id,
@@ -205,34 +208,16 @@ async def test_a_future_scheduled_at_creates_a_scheduled_row_with_no_outbox_even
         content_draft_id=None,
         caption="x",
         media_asset_ids=[AssetId(new_asset_id())],
-        scheduled_at=_NOW + timedelta(days=1),
+        due_at=future,
     )
 
     assert publication.status is PublicationStatus.SCHEDULED
+    assert publication.due_at == future
     events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
     assert events == []
 
 
-async def test_a_past_scheduled_at_publishes_immediately_like_no_schedule() -> None:
-    use_case, uow_factory = _use_case()
-    tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
-
-    publication = await use_case(
-        tenant_id=tenant_id,
-        variant_id=variant_id,
-        channel_id=channel_id,
-        content_draft_id=None,
-        caption="x",
-        media_asset_ids=[AssetId(new_asset_id())],
-        scheduled_at=_NOW - timedelta(minutes=1),
-    )
-
-    assert publication.status is PublicationStatus.PENDING
-    events = await uow_factory.outbox_events.list_unpublished(tenant_id, limit=10)
-    assert len(events) == 1
-
-
-async def test_a_second_publish_conflicts_while_the_first_is_merely_scheduled() -> None:
+async def test_a_second_publish_conflicts_while_the_first_is_merely_scheduled_for_later() -> None:
     use_case, uow_factory = _use_case()
     tenant_id, variant_id, channel_id = await _seed_variant_and_channel(uow_factory)
     await use_case(
@@ -242,7 +227,7 @@ async def test_a_second_publish_conflicts_while_the_first_is_merely_scheduled() 
         content_draft_id=None,
         caption="First.",
         media_asset_ids=[AssetId(new_asset_id())],
-        scheduled_at=_NOW + timedelta(days=1),
+        due_at=_NOW + timedelta(days=1),
     )
 
     with pytest.raises(ConflictError):

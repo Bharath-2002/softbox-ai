@@ -11,10 +11,18 @@ lettered via `TaskQueue.fail` immediately, the same posture
 `StartGenerationItemRender`/`StartContentDraftGeneration` both already
 apply to their own "payload references something now gone" case.
 
-`mark_publishing()` accepts the row's first attempt (`PENDING`, the normal
-case) or a retry after a reverted failed attempt (also `PENDING` — see
-`entities.publication`'s docstring for why a failed-but-retryable attempt
-reverts to `PENDING` rather than its own transient state).
+A publication that exists but is not in a claimable status (`SCHEDULED`
+or `FAILED`) gets the same dead-letter treatment, rather than calling
+`mark_dispatching()` and letting its `ValidationError` propagate uncaught
+out of the worker step. This is a real, reachable path, not a defensive
+guess: `CancelPublication` requires only `SCHEDULED`, so a cancel can land
+in the window between the `due_at` poller enqueueing this job and this
+use case claiming it — an advisor pass caught this before it shipped.
+
+`mark_dispatching()` accepts the row's first attempt (`SCHEDULED`, its
+`due_at` poller-released job) or a retry (`FAILED`, its `TaskQueue`
+backoff-rescheduled job — a retry never goes back through `SCHEDULED`;
+see `entities.publication`'s docstring).
 """
 
 from __future__ import annotations
@@ -23,12 +31,14 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from app.entities.publication import PublicationStatus
 from app.services.ports.unit_of_work import UnitOfWorkFactory
 from app.shared.clock import Clock
 from app.shared.ids import ProductVariantId, PublicationId, SocialAccountId, TenantId
 
 JOB_TYPE = "publication.publish_requested"
 CLAIMED_BY = "publish-channel-worker"
+_CLAIMABLE_STATUSES = (PublicationStatus.SCHEDULED, PublicationStatus.FAILED)
 
 
 @dataclass(frozen=True)
@@ -63,7 +73,19 @@ class StartPublicationPublish:
                 )
                 return None
 
-            publication.mark_publishing(now=now)
+            if publication.status not in _CLAIMABLE_STATUSES:
+                await uow.task_queue.fail(
+                    tenant_id,
+                    job.id,
+                    error=(
+                        f"publication {publication_id} is "
+                        f"{publication.status.value!r}, not claimable"
+                    ),
+                    now=now,
+                )
+                return None
+
+            publication.mark_dispatching(now=now)
             await uow.publications.update(publication)
 
             return PublicationPublishContext(
