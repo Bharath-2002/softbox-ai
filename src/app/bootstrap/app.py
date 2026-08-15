@@ -23,6 +23,7 @@ from app.infrastructure.email.smtp_sender import SmtpEmailSender
 from app.infrastructure.moderation.null_scanner import NullContentModerationScanner
 from app.infrastructure.observability.logging import configure_logging
 from app.infrastructure.persistence.database import create_engine, create_session_factory, ping
+from app.infrastructure.persistence.mapping import start_mappers
 from app.infrastructure.persistence.rate_limiter import SqlRateLimiter
 from app.infrastructure.persistence.unit_of_work import make_unit_of_work_factory
 from app.infrastructure.storage.local_object_storage import LocalObjectStorage
@@ -50,6 +51,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """
     settings = settings or get_settings()
     configure_logging(level=settings.log_level, fmt=settings.log_format)
+    # Must run before any request touches the ORM (mapping.py's own
+    # docstring) - every test suite run has masked this until now because
+    # tests/conftest.py maps once, session-scoped, before any test (including
+    # router tests that build their own app via create_app()) ever runs. A
+    # real deployment calling create_app() with nothing else mapping first
+    # would crash on its first non-fake database query without this.
+    start_mappers()
 
     app = FastAPI(
         title="Softbox AI",
