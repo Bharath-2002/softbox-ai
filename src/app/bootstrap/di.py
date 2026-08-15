@@ -58,6 +58,9 @@ from app.features.generation.complete_generation_item_render import CompleteGene
 from app.features.generation.fail_catalog_image_qc import FailCatalogImageQc
 from app.features.generation.fail_generation_item_render import FailGenerationItemRender
 from app.features.generation.list_catalog_images_for_review import ListCatalogImagesForReview
+from app.features.generation.list_public_catalog_images_for_product import (
+    ListPublicCatalogImagesForProduct,
+)
 from app.features.generation.reconcile_generation_requests_for_tenant import (
     ReconcileGenerationRequestsForTenant,
 )
@@ -563,6 +566,12 @@ def get_list_catalog_images_for_review(
     return ListCatalogImagesForReview(uow_factory)
 
 
+def get_list_public_catalog_images_for_product(
+    uow_factory: UowFactoryDep,
+) -> ListPublicCatalogImagesForProduct:
+    return ListPublicCatalogImagesForProduct(uow_factory)
+
+
 def get_bulk_approve_catalog_images_for_product(
     uow_factory: UowFactoryDep, clock: ClockDep
 ) -> BulkApproveCatalogImagesForProduct:
@@ -831,6 +840,9 @@ ApproveCatalogImageDep = Annotated[ApproveCatalogImage, Depends(get_approve_cata
 RejectCatalogImageDep = Annotated[RejectCatalogImage, Depends(get_reject_catalog_image)]
 ListCatalogImagesForReviewDep = Annotated[
     ListCatalogImagesForReview, Depends(get_list_catalog_images_for_review)
+]
+ListPublicCatalogImagesForProductDep = Annotated[
+    ListPublicCatalogImagesForProduct, Depends(get_list_public_catalog_images_for_product)
 ]
 BulkApproveCatalogImagesForProductDep = Annotated[
     BulkApproveCatalogImagesForProduct, Depends(get_bulk_approve_catalog_images_for_product)

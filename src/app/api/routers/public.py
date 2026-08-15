@@ -14,8 +14,15 @@ read model at the same time. Products follow the same shape:
 ``ProductStatus.PUBLISHED`` is this catalog's "visible to a shopper" state,
 filtered at the repository query (``list_published_page``) rather than
 after fetching, so cursor pagination's own page-boundary accounting stays
-correct for the rows it excludes. Published catalog images are the next
-chunk.
+correct for the rows it excludes.
+
+Catalog images reuse ``RequestDownload`` (M3, CLAUDE.md §11 "private assets
+served by signed short-lived URLs") rather than a public CDN URL — there is
+no real CDN adapter yet (checklist-flagged, credential-blocked), and a
+presigned URL is the only image-delivery mechanism that already exists and
+is already correct for a private object store. One presign call per image
+in the response, the same "known interim shape, not a hidden N+1" posture
+``admin_products.py``'s inline synchronous agent calls already have.
 """
 
 from __future__ import annotations
@@ -28,12 +35,14 @@ from pydantic import BaseModel
 from app.api.deps.tenant_resolution import PublicTenantIdDep
 from app.bootstrap.di import (
     GetPublicProductDep,
+    ListPublicCatalogImagesForProductDep,
     ListPublicCategoryChildrenDep,
     ListPublicProductsDep,
+    RequestDownloadDep,
 )
 from app.entities.category import Category
 from app.entities.product import Product
-from app.shared.ids import CategoryId, ProductId
+from app.shared.ids import CatalogImageId, CatalogImageSlotId, CategoryId, ProductId
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -130,3 +139,29 @@ async def get_product(
 ) -> PublicProductResponse:
     product = await use_case(tenant_id=tenant_id, product_id=product_id)
     return PublicProductResponse.from_entity(product)
+
+
+class PublicCatalogImageResponse(BaseModel):
+    id: CatalogImageId
+    catalog_image_slot_id: CatalogImageSlotId
+    is_primary: bool
+    download_url: str
+
+
+@router.get("/products/{product_id}/images", response_model=list[PublicCatalogImageResponse])
+async def list_product_images(
+    product_id: ProductId,
+    tenant_id: PublicTenantIdDep,
+    use_case: ListPublicCatalogImagesForProductDep,
+    request_download: RequestDownloadDep,
+) -> list[PublicCatalogImageResponse]:
+    images = await use_case(tenant_id=tenant_id, product_id=product_id)
+    return [
+        PublicCatalogImageResponse(
+            id=image.id,
+            catalog_image_slot_id=image.catalog_image_slot_id,
+            is_primary=image.is_primary,
+            download_url=await request_download(tenant_id=tenant_id, asset_id=image.asset_id),
+        )
+        for image in images
+    ]

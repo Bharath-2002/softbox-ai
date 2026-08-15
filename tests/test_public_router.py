@@ -13,21 +13,29 @@ from datetime import UTC, datetime
 
 from httpx import ASGITransport, AsyncClient
 
+from app.api.deps.object_storage import get_object_storage
 from app.bootstrap.app import create_app
 from app.bootstrap.di import get_clock, get_uow_factory
 from app.bootstrap.settings import Settings
+from app.entities.asset import Asset, AssetKind
+from app.entities.catalog_image import CatalogImage, CatalogImageStatus
 from app.entities.category import Category
 from app.entities.product import Product, ProductStatus
+from app.entities.product_variant import ProductVariant
 from app.entities.tenant_domain import TenantDomain
 from app.shared.ids import (
     TenantId,
+    new_asset_id,
+    new_catalog_image_slot_id,
     new_category_id,
     new_category_spec_version_id,
+    new_generation_item_id,
     new_product_id,
     new_tenant_id,
     new_user_id,
 )
 from tests.fakes.clock import FakeClock
+from tests.fakes.object_storage import InMemoryObjectStorage
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
 
 SIGNING_KEY = "a-sufficiently-long-signing-secret-for-tests-only"
@@ -42,6 +50,7 @@ def _build() -> tuple[object, FakeUnitOfWorkFactory]:
     uow_factory = FakeUnitOfWorkFactory()
     app.dependency_overrides[get_uow_factory] = lambda: uow_factory
     app.dependency_overrides[get_clock] = lambda: FakeClock(_NOW)
+    app.dependency_overrides[get_object_storage] = lambda: InMemoryObjectStorage()
     return app, uow_factory
 
 
@@ -217,6 +226,88 @@ async def test_an_unknown_product_id_is_not_found() -> None:
     async with await _client(app) as http:
         response = await http.get(
             f"/api/v1/public/products/{new_product_id()}", headers={"Host": "shop.example.com"}
+        )
+
+    assert response.status_code == 404
+
+
+async def test_listing_images_returns_only_approved_ones_with_download_urls() -> None:
+    app, uow_factory = _build()
+    tenant_id = new_tenant_id()
+    await uow_factory.tenant_domains.add(
+        TenantDomain.create(tenant_id, "shop.example.com", now=_NOW)
+    )
+    product = _published_product(tenant_id, "Maroon silk saree")
+    await uow_factory.products.add(product)
+    variant = ProductVariant.create(
+        tenant_id, product.id, axis_values={}, created_by=new_user_id(), now=_NOW
+    )
+    await uow_factory.product_variants.add(variant)
+    asset = Asset.create(
+        tenant_id,
+        storage_key="tenant/generated/img.jpg",
+        sha256="a" * 64,
+        mime="image/jpeg",
+        width=800,
+        height=800,
+        bytes_=1024,
+        kind=AssetKind.GENERATED,
+        source="pipeline",
+        now=_NOW,
+    )
+    await uow_factory.assets.add(asset)
+    approved = CatalogImage.create(
+        tenant_id,
+        variant.id,
+        new_catalog_image_slot_id(),
+        asset.id,
+        new_generation_item_id(),
+        now=_NOW,
+        is_primary=True,
+    )
+    approved.status = CatalogImageStatus.APPROVED
+    pending = CatalogImage.create(
+        tenant_id,
+        variant.id,
+        new_catalog_image_slot_id(),
+        new_asset_id(),
+        new_generation_item_id(),
+        now=_NOW,
+    )
+    await uow_factory.catalog_images.add(approved)
+    await uow_factory.catalog_images.add(pending)
+
+    async with await _client(app) as http:
+        response = await http.get(
+            f"/api/v1/public/products/{product.id}/images", headers={"Host": "shop.example.com"}
+        )
+
+    assert response.status_code == 200
+    rows = response.json()
+    assert [row["id"] for row in rows] == [str(approved.id)]
+    assert rows[0]["is_primary"] is True
+    assert rows[0]["download_url"]
+
+
+async def test_a_draft_products_images_are_not_found() -> None:
+    app, uow_factory = _build()
+    tenant_id = new_tenant_id()
+    await uow_factory.tenant_domains.add(
+        TenantDomain.create(tenant_id, "shop.example.com", now=_NOW)
+    )
+    product = Product.create(
+        tenant_id,
+        new_category_id(),
+        new_category_spec_version_id(),
+        attributes={},
+        created_by=new_user_id(),
+        now=_NOW,
+    )
+    await uow_factory.products.add(product)
+
+    async with await _client(app) as http:
+        response = await http.get(
+            f"/api/v1/public/products/{product.id}/images", headers={"Host": "shop.example.com"}
         )
 
     assert response.status_code == 404
