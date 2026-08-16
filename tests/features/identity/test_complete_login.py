@@ -10,10 +10,12 @@ from datetime import UTC, datetime
 
 import pytest
 
+from app.entities.roles import Role
 from app.features.identity.complete_login import CompleteLogin
 from app.infrastructure.auth.access_tokens import AccessTokenCodec
 from app.services.ports.identity_provider import OidcClaims
 from app.shared.errors import AuthenticationError
+from app.shared.ids import new_tenant_id
 from tests.fakes.clock import FakeClock
 from tests.fakes.identity_provider import FakeIdentityProvider
 from tests.fakes.unit_of_work import FakeUnitOfWorkFactory
@@ -297,3 +299,116 @@ async def test_a_platform_admin_gets_the_flag_on_their_token() -> None:
     codec = AccessTokenCodec(SIGNING_KEY)
     decoded = codec.decode(second.access_token, now=clock.now())
     assert decoded.is_platform_admin is True
+
+
+async def test_an_allowlisted_owner_email_is_granted_ownership_on_first_login() -> None:
+    provider = FakeIdentityProvider("google")
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
+    uow_factory = FakeUnitOfWorkFactory()
+    codec = AccessTokenCodec(SIGNING_KEY)
+    tenant_id = new_tenant_id()
+    use_case = CompleteLogin(
+        provider,
+        codec,
+        uow_factory,
+        clock,
+        bootstrap_owner_email="owner@example.com",
+        bootstrap_owner_tenant_id=tenant_id,
+    )
+    provider.register_code("code-1", _claims(email="owner@example.com"))
+
+    result = await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    membership = await uow_factory.tenant_memberships.get(tenant_id, result.user_id)
+    assert membership is not None
+    assert membership.role is Role.OWNER
+
+
+async def test_owner_allowlist_comparison_is_case_insensitive() -> None:
+    provider = FakeIdentityProvider("google")
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
+    uow_factory = FakeUnitOfWorkFactory()
+    codec = AccessTokenCodec(SIGNING_KEY)
+    tenant_id = new_tenant_id()
+    use_case = CompleteLogin(
+        provider,
+        codec,
+        uow_factory,
+        clock,
+        bootstrap_owner_email="owner@example.com",
+        bootstrap_owner_tenant_id=tenant_id,
+    )
+    provider.register_code("code-1", _claims(email="Owner@Example.com"))
+
+    result = await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    assert await uow_factory.tenant_memberships.get(tenant_id, result.user_id) is not None
+
+
+async def test_a_non_allowlisted_email_gets_no_bootstrap_membership() -> None:
+    provider = FakeIdentityProvider("google")
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
+    uow_factory = FakeUnitOfWorkFactory()
+    codec = AccessTokenCodec(SIGNING_KEY)
+    tenant_id = new_tenant_id()
+    use_case = CompleteLogin(
+        provider,
+        codec,
+        uow_factory,
+        clock,
+        bootstrap_owner_email="owner@example.com",
+        bootstrap_owner_tenant_id=tenant_id,
+    )
+    provider.register_code("code-1", _claims(email="person@example.com"))
+
+    result = await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    assert await uow_factory.tenant_memberships.get(tenant_id, result.user_id) is None
+
+
+async def test_no_bootstrap_tenant_configured_grants_no_membership() -> None:
+    """Both settings must be present - an operator-configured email with no
+    configured tenant must not silently grant membership somewhere."""
+    use_case, provider, _clock, uow_factory = _use_case()
+    provider.register_code("code-1", _claims(email="person@example.com"))
+
+    result = await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    assert await uow_factory.tenant_memberships.list_for_user(result.user_id) == []
+
+
+async def test_logging_in_twice_with_an_allowlisted_owner_email_does_not_duplicate() -> None:
+    provider = FakeIdentityProvider("google")
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
+    uow_factory = FakeUnitOfWorkFactory()
+    codec = AccessTokenCodec(SIGNING_KEY)
+    tenant_id = new_tenant_id()
+    use_case = CompleteLogin(
+        provider,
+        codec,
+        uow_factory,
+        clock,
+        bootstrap_owner_email="owner@example.com",
+        bootstrap_owner_tenant_id=tenant_id,
+    )
+    provider.register_code("code-1", _claims(email="owner@example.com"))
+    provider.register_code("code-2", _claims(email="owner@example.com"))
+
+    await use_case(
+        code="code-1", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+    result = await use_case(
+        code="code-2", redirect_uri=REDIRECT_URI, nonce="n", expected_state="s", received_state="s"
+    )
+
+    memberships = await uow_factory.tenant_memberships.list_for_user(result.user_id)
+    assert len(memberships) == 1
+    assert memberships[0].role is Role.OWNER

@@ -1,4 +1,5 @@
-"""Session-establishing routes: Google SSO login, refresh, logout.
+"""Session-establishing routes: Google SSO login, tenant selection, refresh,
+logout.
 
 A **fifth** router, deliberately, alongside the four CLAUDE.md §9
 documents (``platform``, ``admin``, ``public``, ``webhooks``). Login fits
@@ -32,7 +33,9 @@ from app.bootstrap.di import (
     GoogleIdentityProviderDep,
     LogoutDep,
     RefreshSessionDep,
+    SelectTenantDep,
 )
+from app.shared.ids import TenantId
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -94,6 +97,17 @@ class RefreshRequest(BaseModel):
 @router.post("/refresh", response_model=TokenPairResponse)
 async def refresh(body: RefreshRequest, use_case: RefreshSessionDep) -> TokenPairResponse:
     result = await use_case(refresh_token=body.refresh_token)
+    return TokenPairResponse(access_token=result.access_token, refresh_token=result.refresh_token)
+
+
+class SelectTenantRequest(BaseModel):
+    refresh_token: str
+    tenant_id: TenantId
+
+
+@router.post("/select-tenant", response_model=TokenPairResponse)
+async def select_tenant(body: SelectTenantRequest, use_case: SelectTenantDep) -> TokenPairResponse:
+    result = await use_case(refresh_token=body.refresh_token, tenant_id=body.tenant_id)
     return TokenPairResponse(access_token=result.access_token, refresh_token=result.refresh_token)
 
 

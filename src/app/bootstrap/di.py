@@ -70,6 +70,7 @@ from app.features.generation.start_generation_item_render import StartGeneration
 from app.features.identity.complete_login import CompleteLogin
 from app.features.identity.logout import Logout
 from app.features.identity.refresh_session import RefreshSession
+from app.features.identity.select_tenant import SelectTenant
 from app.features.identity.start_impersonation import StartImpersonation
 from app.features.products.capture_product_input_image import CaptureProductInputImage
 from app.features.products.complete_input_image_validation import CompleteInputImageValidation
@@ -183,9 +184,16 @@ def get_complete_login(
     uow_factory: UowFactoryDep,
     clock: ClockDep,
 ) -> CompleteLogin:
-    admin_emails = frozenset(request.app.state.settings.admin_emails)
+    settings = request.app.state.settings
+    admin_emails = frozenset(settings.admin_emails)
     return CompleteLogin(
-        provider, token_issuer, uow_factory, clock, bootstrap_admin_emails=admin_emails
+        provider,
+        token_issuer,
+        uow_factory,
+        clock,
+        bootstrap_admin_emails=admin_emails,
+        bootstrap_owner_email=settings.bootstrap_owner_email,
+        bootstrap_owner_tenant_id=settings.bootstrap_owner_tenant_id,
     )
 
 
@@ -195,6 +203,14 @@ def get_refresh_session(
     clock: ClockDep,
 ) -> RefreshSession:
     return RefreshSession(token_issuer, uow_factory, clock)
+
+
+def get_select_tenant(
+    token_issuer: Annotated[TokenIssuer, Depends(get_token_issuer)],
+    uow_factory: UowFactoryDep,
+    clock: ClockDep,
+) -> SelectTenant:
+    return SelectTenant(token_issuer, uow_factory, clock)
 
 
 def get_logout(uow_factory: UowFactoryDep, clock: ClockDep) -> Logout:
@@ -211,6 +227,7 @@ def get_start_impersonation(
 
 CompleteLoginDep = Annotated[CompleteLogin, Depends(get_complete_login)]
 RefreshSessionDep = Annotated[RefreshSession, Depends(get_refresh_session)]
+SelectTenantDep = Annotated[SelectTenant, Depends(get_select_tenant)]
 LogoutDep = Annotated[Logout, Depends(get_logout)]
 StartImpersonationDep = Annotated[StartImpersonation, Depends(get_start_impersonation)]
 

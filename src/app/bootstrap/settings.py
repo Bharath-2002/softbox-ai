@@ -14,6 +14,8 @@ from typing import Literal
 from pydantic import Field, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.shared.ids import TenantId
+
 Environment = Literal["local", "test", "staging", "production"]
 
 
@@ -72,6 +74,17 @@ class Settings(BaseSettings):
     # the first platform admin without one already existing to do the
     # granting.
     admin_emails: tuple[str, ...] = ()
+
+    # The same bootstrap shape one level down: platform_admin (above) grants
+    # nothing within any one tenant (D4 - the planes are deliberately kept
+    # separate). Nothing in this codebase creates a TenantMembership
+    # automatically yet (no invite/onboarding flow - M9 territory), so this
+    # is the interim way one operator-configured email becomes OWNER of one
+    # operator-configured tenant on login (CompleteLogin's
+    # bootstrap_owner_email/bootstrap_owner_tenant_id). Both must be set for
+    # either to take effect.
+    bootstrap_owner_email: str | None = None
+    bootstrap_owner_tenant_id: TenantId | None = None
 
     # ── Email ────────────────────────────────────────────────────────────────
     # "console" (log instead of sending) is the default - local dev and CI
